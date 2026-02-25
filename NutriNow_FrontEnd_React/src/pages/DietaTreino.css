@@ -1,0 +1,257 @@
+.dieta-treino-container {
+  min-height: calc(100vh - 80px);
+  padding: 40px 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.content-wrap {
+  width: min(1000px, 100%);
+}
+
+.page-header {
+  text-align: center;
+  color: white;
+  margin-bottom: 40px;
+}
+
+.page-header h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.page-header p {
+  opacity: 0.9;
+  font-size: 1.1rem;
+}
+
+.tab-switcher {
+  display: flex;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  padding: 6px;
+  border-radius: 16px;
+  margin-bottom: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tab-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px;
+  border: none;
+  background: transparent;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 12px;
+  transition: all 0.3s;
+}
+
+.tab-btn.active {
+  background: white;
+  color: #16a085;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.list-section {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 24px;
+  padding: 30px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  min-height: 400px;
+}
+
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  color: #075546;
+}
+
+.add-btn-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background: #16a085;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.add-btn-circle:hover {
+  transform: scale(1.1);
+  background: #0d9488;
+}
+
+.items-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.item-card {
+  background: #f8fafc;
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.2s;
+}
+
+.item-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+}
+
+.item-content h3 {
+  margin-bottom: 8px;
+  color: #1a202c;
+  font-size: 1.2rem;
+}
+
+.item-content p {
+  color: #4a5568;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.item-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: #718096;
+  font-weight: 500;
+}
+
+.item-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #edf2f7;
+}
+
+.action-btn {
+  border: none;
+  background: transparent;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.action-btn.edit { color: #3182ce; }
+.action-btn.edit:hover { background: #ebf8ff; }
+
+.action-btn.delete { color: #e53e3e; }
+.action-btn.delete:hover { background: #fff5f5; }
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #718096;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal-content {
+  background: white;
+  width: min(500px, 100%);
+  border-radius: 24px;
+  padding: 30px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.close-modal {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #a0aec0;
+}
+
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.modal-form .input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modal-form label {
+  font-weight: 600;
+  color: #4a5568;
+  font-size: 0.9rem;
+}
+
+.modal-form input, .modal-form textarea {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  font-size: 1rem;
+  background: #f8fafc;
+}
+
+.modal-form textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.modal-actions button {
+  flex: 1;
+  padding: 12px;
+}
+
+.loading-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+  color: #718096;
+}

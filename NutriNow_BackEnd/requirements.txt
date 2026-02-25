@@ -1,0 +1,12 @@
+mysql-connector-python
+python-dotenv
+langchain
+langchain-community
+langchain-core
+pydantic
+Pillow
+Flask
+Flask-Cors
+Werkzeug
+ollama
+requests
