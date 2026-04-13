@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, redirect
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from Nutri import NutritionistAgent
@@ -8,6 +8,10 @@ from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import secrets
+import requests
+import json
+from oauthlib.oauth2 import WebApplicationClient
+from dataclasses import dataclass
 
 # ---------------- Configurações ----------------
 app = Flask(__name__)
@@ -17,11 +21,38 @@ from dotenv import load_dotenv
 load_dotenv()
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "nutrinow_super_secret_key_123")
 
+# Permitir OAuth2 em localhost (HTTP)
+os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+
 # Configuração de cookies de sessão
 app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",  # Funciona bem em localhost
     SESSION_COOKIE_SECURE=False,    # HTTPS = True, localhost = False
 )
+
+CLIENT_ID = os.getenv("CLIENT_ID")
+CLIENT_SECRET = os.getenv("SECRET_KEY_CLIENT")
+
+client = WebApplicationClient(client_id=CLIENT_ID)
+
+@dataclass
+class GoogleHosts:
+    authorization_endpoint: str
+    token_endpoint: str
+    userinfo_endpoint: str
+    certs: str
+
+def get_google_oauth_hosts():
+    response = requests.get("https://accounts.google.com/.well-known/openid-configuration")
+    if response.status_code != 200:
+        raise Exception("Não foi possível recuperar os endpoints do Google OAuth")
+    data = response.json()
+    return GoogleHosts(
+        authorization_endpoint=data.get("authorization_endpoint"), 
+        token_endpoint=data.get("token_endpoint"), 
+        userinfo_endpoint=data.get("userinfo_endpoint"), 
+        certs=data.get("jwks_uri")
+    )
 
 # CORS - Atualizado para suportar React (Vite) e opcionalmente o domínio do frontend no .env
 cors_origin = os.getenv("CORS_ORIGIN", "http://localhost:5173")
@@ -138,6 +169,93 @@ def login():
     finally:
         cursor.close()
         conn.close()
+
+@app.route("/auth/login", methods=["GET"])
+def google_login():
+    hosts = get_google_oauth_hosts()
+    authorization_url = client.prepare_request_uri(
+        uri=hosts.authorization_endpoint,
+        redirect_uri="http://localhost:8000/auth/callback",
+        scope=["openid", "email", "profile"]
+    )
+    return jsonify({"auth_url": authorization_url}), 200
+
+@app.route("/auth/callback")
+def google_callback():
+    code = request.args.get("code")
+    if not code:
+        return redirect("http://localhost:5173/login?error=missing_code")
+
+    try:
+        hosts = get_google_oauth_hosts()
+        token_url, headers, body = client.prepare_token_request(
+            token_url=hosts.token_endpoint,
+            # Importante: para http/localhost, remover se der erro na verificação do oauthlib
+            authorization_response=request.url,
+            redirect_url="http://localhost:8000/auth/callback",
+            code=code
+        )
+        
+        token_response = requests.post(
+            token_url,
+            headers=headers,
+            data=body,
+            auth=(CLIENT_ID, CLIENT_SECRET),
+        )
+
+        client.parse_request_body_response(json.dumps(token_response.json()))
+
+        uri, headers, body = client.add_token(hosts.userinfo_endpoint)
+        user_info_response = requests.get(uri, headers=headers, data=body)
+
+        if user_info_response.json().get("email_verified"):
+            google_user = user_info_response.json()
+            user_email = google_user["email"]
+            user_name = google_user["name"]
+            
+            conn = get_db_connection()
+            cursor = conn.cursor(dictionary=True)
+            
+            cursor.execute("SELECT id, nome, email FROM usuarios WHERE email=%s", (user_email,))
+            user = cursor.fetchone()
+            
+            if not user:
+                # Criar usuário novo para o OAuth
+                senha_hash = generate_password_hash("oauth_" + secrets.token_hex(8))
+                partes_nome = user_name.split(' ', 1)
+                nome = partes_nome[0]
+                sobrenome = partes_nome[1] if len(partes_nome) > 1 else ""
+                data_nascimento = "2000-01-01"
+                genero = "Masculino"
+
+                cursor.execute("""
+                    INSERT INTO usuarios (nome, sobrenome, data_nascimento, genero, email, senha)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (nome, sobrenome, data_nascimento, genero, user_email, senha_hash))
+                conn.commit()
+                
+                user_id = cursor.lastrowid
+                user_nome = nome
+            else:
+                user_id = user["id"]
+                user_nome = user["nome"]
+                
+                # Update nome se for diferente? (opcional)
+
+            session["user_id"] = user_id
+            session["user_name"] = user_nome
+            session["user_email"] = user_email
+            
+            cursor.close()
+            conn.close()
+            
+            return redirect("http://localhost:5173/")
+        
+        return redirect("http://localhost:5173/login?error=email_not_verified")
+    
+    except Exception as e:
+        logger.error(f"Erro no callback do google: {e}")
+        return redirect("http://localhost:5173/login?error=server_error")
 
 @app.route("/logout", methods=["POST"])
 def logout():
@@ -268,8 +386,8 @@ def after_request(response):
 # Função de envio de email
 # -----------------------------
 def enviar_email(destinatario, assunto, mensagem_html):
-    remetente = "nnutrinow@gmail.com"
-    senha = "tdngwxjbhiznkrlr"
+    remetente = os.getenv("EMAIL_SENDER", "nnutrinow@gmail.com")
+    senha = os.getenv("EMAIL_PASSWORD")
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = assunto

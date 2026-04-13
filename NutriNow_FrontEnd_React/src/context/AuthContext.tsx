@@ -23,13 +23,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const savedUser = localStorage.getItem('usuario');
-        if (savedUser) {
-          // Verifica se a sessão ainda é válida no backend REAL
-          const res = await api.get('/me'); 
-          setUser(res.data);
-          localStorage.setItem('usuario', JSON.stringify(res.data));
-        }
+        // Verifica diretamente com o backend se existe uma sessão válida (necessário para o Google Login)
+        const res = await api.get('/me'); 
+        setUser(res.data);
+        localStorage.setItem('usuario', JSON.stringify(res.data));
       } catch (error) {
         // Se o backend der erro (401), limpa o localStorage
         localStorage.removeItem('usuario');

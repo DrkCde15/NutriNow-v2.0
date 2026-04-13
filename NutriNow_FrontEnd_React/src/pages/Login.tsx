@@ -15,6 +15,26 @@ const Login: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  // Handle OAuth errors from URL
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('error')) {
+      setError('Erro na autenticação com Google: ' + params.get('error'));
+    }
+  }, []);
+
+  const handleGoogleLogin = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/auth/login');
+      const data = await response.json();
+      if (data.auth_url) {
+        window.location.href = data.auth_url;
+      }
+    } catch (err) {
+      setError('Erro ao redirecionar para o login do Google.');
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setMessage('');
@@ -37,12 +57,8 @@ const Login: React.FC = () => {
       <main className="login-card fade-in-up">
         <h1>Bem-vindo de volta</h1>
 
-        <button className="btn-social google">
+        <button className="btn-social google" onClick={handleGoogleLogin} type="button">
           <i className="fa-brands fa-google"></i> Conectar com o Google
-        </button>
-
-        <button className="btn-social facebook">
-          <i className="fa-brands fa-facebook"></i> Conectar com o Facebook
         </button>
 
         <div className="divider"><span>OU</span></div>

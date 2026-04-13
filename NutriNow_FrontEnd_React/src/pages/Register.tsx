@@ -20,6 +20,18 @@ const Register: React.FC = () => {
 
   const navigate = useNavigate();
 
+  const handleGoogleLogin = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/auth/login');
+      const data = await response.json();
+      if (data.auth_url) {
+        window.location.href = data.auth_url;
+      }
+    } catch (err) {
+      setError('Erro ao redirecionar para o login do Google.');
+    }
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -46,6 +58,16 @@ const Register: React.FC = () => {
     <div className="login-container">
       <main className="login-card fade-in-up">
         <h1>Criar sua conta</h1>
+
+        <button className="btn-social google" onClick={handleGoogleLogin} type="button">
+          <i className="fa-brands fa-google"></i> Conectar com o Google
+        </button>
+
+        <button className="btn-social facebook" type="button">
+          <i className="fa-brands fa-facebook"></i> Conectar com o Facebook
+        </button>
+
+        <div className="divider"><span>OU</span></div>
 
         <form className="login-form" onSubmit={handleRegister}>
           <div className="input-group">

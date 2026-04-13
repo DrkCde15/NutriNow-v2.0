@@ -11,3 +11,4 @@ Werkzeug
 ollama
 requests
 google-genai
+oauthlib
