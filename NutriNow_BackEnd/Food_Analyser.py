@@ -1,30 +1,22 @@
-# food_analyser.py - Módulo de visão nutricional baseado na arquitetura NEURA
+# food_analyser.py - Nutritionist Vision Module using Google GenAI (Gemini)
 import os
 import sys
 import logging
 import traceback
 import base64
-import ollama
 from datetime import datetime
-from pydantic import PrivateAttr
-from langchain.tools import BaseTool
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Adiciona o caminho do projeto NEURA ao python path
-if os.getenv("NEURA_PATH"):
-    sys.path.append(os.getenv("NEURA_PATH"))
-
-try:
-    from neura_ai.core import Neura
-    from neura_ai.config import NeuraConfig
-except ImportError:
-    print("Aviso: neura_ai não encontrado. Verifique o NEURA_PATH no .env")
+from google import genai
+from google.genai import types
+from PIL import Image
+import time
 
 logger = logging.getLogger(__name__)
 
-# Prompt especializado para o estágio 1 (Moondream)
+# Prompt especializado para o estágio 1
 VISION_PROMPT = """
 Você é um especialista em reconhecimento de alimentos e análise visual nutricional.
 Analise a imagem e identifique com precisão:
@@ -35,67 +27,54 @@ Analise a imagem e identifique com precisão:
 Seja puramente descritivo e técnico sobre o que vê.
 """
 
-class FoodAnalyser(BaseTool):
-    name: str = "food_analyser"
-    description: str = """Analisa imagens de refeições para extrair dados nutricionais e fornecer feedback especializado."""
-
-    _neura: any = PrivateAttr()
-
+class FoodAnalyser:
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        # Configuração do Host Local conforme padrão NOG
-        host_ollama = "http://127.0.0.1:11434"
-        
-        # Inicializa o NEURA CORE para Visão
-        self._neura = Neura(
-            model="gemma2:2b", 
-            vision_model="moondream:latest", 
-            system_prompt=VISION_PROMPT,
-            host=host_ollama,
-            use_memory=False
+        # Inicializa o Cliente Google GenAI (Gemini)
+        api_key = os.getenv("GEMINI_API_KEY")
+        self.client = genai.Client(api_key=api_key)
+        self.model_name = "gemini-2.5-flash"
+        self.config = types.GenerateContentConfig(
+            system_instruction=VISION_PROMPT
         )
-        
-        # AJUSTE DE TIMEOUT EXTREMO: Modelos de visão podem demorar muito no primeiro load.
-        # Aumentamos para 600 segundos (10 minutos).
-        self._neura.client = ollama.Client(
-            host=host_ollama, 
-            timeout=600.0 
-        )
-        logger.info("🚀 FoodAnalyser configurado com timeout estendido de 600s.")
+        logger.info("🚀 FoodAnalyser configurado com Gemini 2.5 Flash.")
 
-    def _run(self, image_path: str) -> str:
-        """Análise síncrona de imagem usando a abordagem de dois estágios"""
-        return self._analyze_image(image_path)
 
-    async def _arun(self, image_path: str) -> str:
-        """Análise assíncrona de imagem"""
-        return self._analyze_image(image_path)
 
     def _analyze_image(self, image_path: str) -> str:
         try:
             if not os.path.exists(image_path):
                 return f"❌ Erro: Arquivo {os.path.basename(image_path)} não encontrado."
 
-            # ESTÁGIO 1: VISÃO BRUTA (Moondream)
-            logger.info("👁️ Estágio 1: Extraindo fatos nutricionais da imagem (isso pode levar um minuto)...")
+            # ESTÁGIO 1: VISÃO BRUTA
+            logger.info("👁️ Estágio 1: Extraindo fatos nutricionais da imagem...")
             instrucao_visao = "Identify all food items in this meal and estimate theirs portions."
             
-            # Chamada direta ao client para garantir que o timeout seja aplicado
             try:
-                with open(image_path, 'rb') as f:
-                    img_data = f.read()
+                img = Image.open(image_path)
                 
-                res_vision = self._neura.client.generate(
-                    model="moondream:latest",
-                    prompt=instrucao_visao,
-                    images=[img_data]
-                )
-                fatos_visuais = res_vision['response']
+                max_retries = 2
+                for attempt in range(max_retries):
+                    try:
+                        res_vision = self.client.models.generate_content(
+                            model=self.model_name,
+                            contents=[instrucao_visao, img]
+                        )
+                        fatos_visuais = res_vision.text
+                        break
+                    except Exception as e:
+                        if ("429" in str(e) or "503" in str(e)) and attempt < max_retries - 1:
+                            time.sleep(2)
+                            continue
+                        raise e
             except Exception as vision_err:
                 logger.error(f"Erro no estágio de visão: {vision_err}")
-                return "❌ Erro: O servidor de IA local demorou muito para processar a imagem. Tente novamente."
+                if "429" in str(vision_err):
+                    return "❌ Erro: Limite de cota atingido. Por favor, aguarde alguns segundos antes de enviar outra imagem."
+                if "503" in str(vision_err):
+                    return "❌ Erro: Servidor sobrecarregado (503). Os servidores da Google estão com alta demanda temporária. Aguarde uns segundos e tente analisar novamente."
+                return "❌ Erro: Ocorreu um problema ao processar a imagem com Gemini. Tente novamente."
 
-            # ESTÁGIO 2: INTERPRETAÇÃO DA NUTRIAI (Gemma)
+            # ESTÁGIO 2: INTERPRETAÇÃO DA NUTRIAI
             logger.info("🧠 Estágio 2: NutriAI interpretando dados...")
             
             prompt_nutri = f"""
@@ -112,12 +91,12 @@ class FoodAnalyser(BaseTool):
             """
 
             # Chamada de texto
-            res_text = self._neura.client.generate(
-                model="gemma2:2b",
-                prompt=prompt_nutri,
-                system=VISION_PROMPT # Usa o prompt do sistema para manter a persona
+            res_text = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt_nutri,
+                config=self.config
             )
-            resposta_final = res_text['response']
+            resposta_final = res_text.text
             
             return f"""
 🍱 **Análise Nutricional NutriNow**
@@ -126,12 +105,16 @@ class FoodAnalyser(BaseTool):
 {resposta_final}
 
 ---
-💬 **Nota:** Análise processada localmente pela NutriAI. Valores são estimativas.
+💬 **Nota:** Análise processada pela NutriAI via Google GenAI. Valores são estimativas.
 """
 
         except Exception as e:
             logger.error(f"❌ Erro na análise de visão: {traceback.format_exc()}")
-            return "❌ A NutriAI não conseguiu analisar esta imagem no momento. Verifique se o servidor Ollama está ativo."
+            if "503" in str(e):
+                return "❌ A NutriAI está enfrentando alta demanda nos servidores da inteligência artificial (503). Por favor, aguarde alguns segundos e envie novamente."
+            if "429" in str(e):
+                 return "❌ Limite de requisições excedido (429). Aguarde um minuto."
+            return "❌ A NutriAI não conseguiu analisar esta imagem no momento. Verifique sua conexão e a chave API."
 
     def analyze_food_image(self, image_path: str) -> str:
         return self._analyze_image(image_path)

@@ -6,7 +6,7 @@
 
 O **NutriNow 2.0** não é apenas mais um rastreador de calorias ou gerenciador de dietas. Nossa proposta é ser um **Consultor de Saúde Onipresente**, eliminando a barreira entre o usuário e o conhecimento nutricional de alta qualidade, sem comprometer seus dados pessoais.
 
-Muitas plataformas de saúde hoje dependem de serviços na nuvem onde seus dados alimentares, médicos e rotinas são vendidos ou processados por grandes modelos de linguagem externos. O NutriNow rompe com isso através da **I.A**.
+Muitas plataformas de saúde hoje dependem de serviços na nuvem onde seus dados alimentares, médicos e rotinas são vendidos ou processados por grandes modelos de linguagem externos. O NutriNow rompe com isso através da **I.A de Ponta**, utilizando o estado da arte em processamento de linguagem e visão computacional via **Google GenAI**.
 
 ---
 
@@ -27,15 +27,15 @@ A Inteligência Artificial atua como um catalisador para a mudança de hábitos.
 
 ## 🤖 A Inteligência Artificial
 
-A IA do NutriNow é baseada na arquitetura **NEURA**, um motor de inteligência artificial projetado para extrair o máximo de modelos compactos de última geração (LLMs) diretamente no hardware do usuário.
+A IA do NutriNow utiliza a biblioteca **Google GenAI**, integrando o modelo **Gemini 2.5 Flash** para oferecer uma experiência de alta performance, rapidez e inteligência superior.
 
-### Por que IA Local?
+### Por que Gemini 2.5 Flash?
 
-1.  **Privacidade Absoluta**: Seus dados de saúde são sensíveis. No NutriNow, suas fotos de pratos e conversas sobre saúde nunca deixam o seu disco rígido.
-2.  **Custo Zero de API**: Ao usar seu próprio hardware (via Ollama), eliminamos mensalidades caras de APIs externas, permitindo uma ferramenta gratuita e poderosa.
+1.  **Velocidade e Estabilidade**: O Gemini 2.5 Flash é otimizado para respostas rápidas e possui limites de cota muito mais generosos e estáveis, garantindo um acompanhamento sem falhas.
+2.  **Visão Computacional Avançada**: Diferente de modelos locais limitados, o Gemini possui uma capacidade multimodal nativa que analisa fotos de alimentos com precisão de detalhes impressionante.
 3.  **Análise de Visão em Dois Estágios**:
-    - **Identificação**: Nossa IA analisa a imagem de forma bruta para encontrar "fatos visuais" (ingredientes e porções).
-    - **Interpretação**: Um modelo especialista em nutrição traduz esses fatos em macronutrientes e sugestões estratégicas.
+    -   **Identificação**: Nossa aplicação utiliza a visão multimodal do Gemini para extrair fatos visuais complexos (ingredientes, porções e métodos de preparo).
+    -   **Interpretação**: A NutriAI processa esses dados para gerar um relatório nutricional estruturado com macronutrientes e dicas personalizadas.
 
 ---
 
@@ -61,28 +61,20 @@ Basta tirar uma foto do seu prato para receber:
 ## 🛠️ Stack Tecnológica
 
 - **Frontend**: React 18, Vite, TypeScript, Lucide-Icons, CSS Premium (Glassmorphism).
-- **Backend**: Flask (Python), MySQL, NEURA AI Core.
-- **Motor de IA**: Ollama (Rodando Gemma 2 e Moondream).
+- **Backend**: Flask (Python), MySQL, Google GenAI SDK.
+- **Motor de IA**: Google Gemini 2.5 Flash (Multimodal & Velocidade).
 
 ---
 
 ## 🚀 Como Rodar o Projeto
 
-### 1. Preparar a IA (Ollama)
-
-Instale o [Ollama](https://ollama.com/) e rode:
-
-```bash
-ollama pull gemma2:2b
-ollama pull moondream:latest
-```
+### 1. Obter Chave de API
+Obtenha uma chave de API gratuita ou premium no [Google AI Studio](https://aistudio.google.com/).
 
 ### 2. Banco de Dados
-
 Importe o `NutriNow_BackEnd/nutrinow2.sql` no seu servidor MySQL.
 
 ### 3. Configuração (.env)
-
 Na pasta `NutriNow_BackEnd/`, configure seu `.env`:
 
 ```env
@@ -91,7 +83,7 @@ MYSQL_USER=root
 MYSQL_PASSWORD=sua_senha
 MYSQL_DATABASE=nutrinow2
 FLASK_SECRET_KEY=nutrinow_sec_key
-NEURA_PATH=C:\Caminho\Para\NeuraCore
+GEMINI_API_KEY=sua_chave_api_do_google
 ```
 
 ---

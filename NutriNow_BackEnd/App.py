@@ -166,10 +166,11 @@ def chat():
     if "user_id" not in session:
         return jsonify({"error": "Usuário não autenticado"}), 401
 
-    session_id = request.headers.get("X-Session-ID") or str(uuid.uuid4())
+    data = request.get_json()
+    # Tenta pegar session_id do Header, depois do Body JSON
+    session_id = request.headers.get("X-Session-ID") or data.get("session_id") or str(uuid.uuid4())
     user_id = session.get("user_id")
     email = session.get("user_email")
-    data = request.get_json()
     message = data.get("message")
     if not message:
         return jsonify({"error": "Mensagem vazia"}), 400
@@ -183,9 +184,11 @@ def chat_history():
     if "user_id" not in session:
         return jsonify({"error": "Usuário não autenticado"}), 401
 
-    session_id = request.args.get("session_id") or str(uuid.uuid4())
+    session_id = request.args.get("session_id") or request.headers.get("X-Session-ID")
     user_id = session.get("user_id")
-    agent = get_agent(session_id=session_id, user_id=user_id)
+    email = session.get("user_email")
+    
+    agent = get_agent(session_id=session_id, user_id=user_id, email=email)
     history = agent.get_conversation_history(by_user=True)
     return jsonify({"success": True, "history": history})
 
@@ -257,8 +260,8 @@ def health():
 # ---------------- Headers CORS extra para pré-flight ----------------
 @app.after_request
 def after_request(response):
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Session-ID')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS,PUT,DELETE')
     return response
 #--------------- Envia email e recupera a senha ------------------------
 # -----------------------------

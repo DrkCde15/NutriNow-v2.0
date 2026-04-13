@@ -10,3 +10,4 @@ Flask-Cors
 Werkzeug
 ollama
 requests
+google-genai
