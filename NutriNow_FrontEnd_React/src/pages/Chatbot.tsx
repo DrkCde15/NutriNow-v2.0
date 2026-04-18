@@ -36,8 +36,6 @@ const Chatbot: React.FC = () => {
     loadChatHistory();
   }, [user]);
 
-  // Removido o ScrollToBottom automático para manter o foco nas mensagens recentes no topo
-
   const loadChatHistory = async () => {
     try {
       const response = await chatService.getChatHistory();
@@ -172,7 +170,7 @@ const Chatbot: React.FC = () => {
         </header>
 
         <main className="messages-area">
-          {[...messages].reverse().map((msg, idx) => (
+          {messages.map((msg, idx) => (
             <div key={idx} className={`msg-row ${msg.isUser ? 'msg-user' : 'msg-bot'}`}>
               {!msg.isUser && (
                 <div className="msg-avatar">

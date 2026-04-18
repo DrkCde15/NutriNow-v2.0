@@ -107,7 +107,12 @@ class NutritionistAgent:
                 query += "session_id = %s "
                 params.append(self.session_id)
             
-            query += "ORDER BY timestamp DESC LIMIT %s"
+            query += """
+                ORDER BY
+                    timestamp DESC,
+                    CASE WHEN message_type = 'ai' THEN 0 ELSE 1 END
+                LIMIT %s
+            """
             params.append(limit)
             
             cursor.execute(query, tuple(params))
@@ -116,7 +121,11 @@ class NutritionistAgent:
             
             # Formata para a IA (do mais antigo para o mais novo)
             for row in reversed(rows):
-                history.append({"role": "user" if row['message_type'] == 'human' else "assistant", "content": row['content']})
+                history.append({
+                    "role": "user" if row['message_type'] == 'human' else "assistant",
+                    "content": row['content'],
+                    "timestamp": row['timestamp']
+                })
         except Exception as e:
             logger.error(f"Erro ao buscar histórico: {e}")
         return history
