@@ -32,7 +32,7 @@ class FoodAnalyser:
         # Inicializa o Cliente Google GenAI (Gemini)
         api_key = os.getenv("GEMINI_API_KEY")
         self.client = genai.Client(api_key=api_key)
-        self.model_name = "gemini-2.5-flash"
+        self.model_name = "gemini-1.5-flash"
         self.config = types.GenerateContentConfig(
             system_instruction=VISION_PROMPT
         )

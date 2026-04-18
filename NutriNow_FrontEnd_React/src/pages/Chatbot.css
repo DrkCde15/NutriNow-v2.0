@@ -199,7 +199,7 @@
 
 .msg-user {
   align-self: flex-end;
-  flex-direction: row-reverse;
+  flex-direction: row;
 }
 
 .msg-avatar {

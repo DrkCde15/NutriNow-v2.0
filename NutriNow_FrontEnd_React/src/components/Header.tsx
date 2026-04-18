@@ -50,7 +50,6 @@ const Header: React.FC = () => {
 
         <div className={`nav-menu ${menuOpen ? 'is-open' : ''}`}>
           <div className="nav-links main-nav">
-          <Link to="/" className={`nav-link ${isActive('/')}`}>Início</Link>
           {user && (
             <>
               <Link to="/dieta-treino" className={`nav-link ${isActive('/dieta-treino')}`}>Dietas e Treinos</Link>

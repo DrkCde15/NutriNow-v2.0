@@ -558,14 +558,22 @@ def update_perfil():
 
     user_id = session["user_id"]
 
+    if data_nascimento:
+        parsed_date = None
+        for date_format in ("%Y-%m-%d", "%d/%m/%Y"):
+            try:
+                parsed_date = datetime.strptime(data_nascimento, date_format)
+                break
+            except ValueError:
+                continue
+
+        if not parsed_date:
+            return jsonify({"error": "Formato de data inválido. Use yyyy-mm-dd ou dd/mm/yyyy"}), 400
+
+        data_nascimento = parsed_date.strftime("%Y-%m-%d")
+
     try:
         # Converte data dd/mm/yyyy → yyyy-mm-dd
-        if data_nascimento:
-            try:
-                data_nascimento = datetime.strptime(data_nascimento, "%d/%m/%Y").strftime("%Y-%m-%d")
-            except ValueError:
-                return jsonify({"error": "Formato de data inválido. Use dd/mm/yyyy"}), 400
-
         conn = get_db_connection()
         cursor = conn.cursor()
 

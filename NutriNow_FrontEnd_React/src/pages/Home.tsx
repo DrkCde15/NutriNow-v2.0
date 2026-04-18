@@ -163,7 +163,7 @@ const Home: React.FC = () => {
       <footer className="footer">
         <div className="footer-content">
           <div className="footer-copyright">
-            © 2024 NutriNow. Todos os direitos reservados. | Desenvolvido com ❤️ para sua saúde
+            © 2024 NutriNow. Todos os direitos reservados. | Desenvolvido para sua saúde
           </div>
         </div>
       </footer>

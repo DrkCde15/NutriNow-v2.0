@@ -4,6 +4,21 @@ import { useAuth } from '../context/AuthContext';
 import { Settings, Calendar, Target, Ruler, Trash2, X, Camera } from 'lucide-react';
 import './Perfil.css';
 
+const toDateInputValue = (value: string) => {
+  if (!value || value === '--/--/----') return '';
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+
+  const [dia, mes, ano] = value.split('/');
+  if (dia && mes && ano) {
+    return `${ano}-${mes}-${dia}`;
+  }
+
+  return '';
+};
+
 const Perfil: React.FC = () => {
   const { user } = useAuth();
   const [profile, setProfile] = useState({
@@ -64,7 +79,7 @@ const Perfil: React.FC = () => {
     setFormData({
       nome: profile.nome,
       email: profile.email,
-      dataNascimento: profile.dataNascimento === '--/--/----' ? '' : profile.dataNascimento,
+      dataNascimento: toDateInputValue(profile.dataNascimento),
       meta: profile.meta === 'Não definida' ? '' : profile.meta,
       altura: altura?.replace('m', '').trim() || '',
       peso: peso?.replace('kg', '').trim() || ''

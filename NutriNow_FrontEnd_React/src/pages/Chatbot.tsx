@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { chatService } from '../services/chatService';
@@ -18,7 +18,6 @@ const Chatbot: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -37,9 +36,7 @@ const Chatbot: React.FC = () => {
     loadChatHistory();
   }, [user]);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, loading]);
+  // Removido o ScrollToBottom automático para manter o foco nas mensagens recentes no topo
 
   const loadChatHistory = async () => {
     try {
@@ -57,11 +54,6 @@ const Chatbot: React.FC = () => {
     }
   };
 
-  const scrollToBottom = () => {
-    if (messagesContainerRef.current) {
-      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-    }
-  };
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -179,8 +171,8 @@ const Chatbot: React.FC = () => {
           </button>
         </header>
 
-        <main className="messages-area" ref={messagesContainerRef}>
-          {messages.map((msg, idx) => (
+        <main className="messages-area">
+          {[...messages].reverse().map((msg, idx) => (
             <div key={idx} className={`msg-row ${msg.isUser ? 'msg-user' : 'msg-bot'}`}>
               {!msg.isUser && (
                 <div className="msg-avatar">
