@@ -19,24 +19,39 @@ const toDateInputValue = (value: string) => {
   return '';
 };
 
+interface ProfileData {
+  nome: string;
+  email: string;
+  dataNascimento: string;
+  meta: string;
+  altura: number | null;
+  peso: number | null;
+  ja_treinou: string;
+  foto: string;
+}
+
 const Perfil: React.FC = () => {
   const { user } = useAuth();
-  const [profile, setProfile] = useState({
+  const [profile, setProfile] = useState<ProfileData>({
     nome: '',
     email: '',
     dataNascimento: '',
     meta: '',
-    alturaPeso: '',
+    altura: null,
+    peso: null,
+    ja_treinou: 'Nunca treinou',
     foto: 'U'
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [hasTrained, setHasTrained] = useState(false);
   const [formData, setFormData] = useState({
     nome: '',
     email: '',
     dataNascimento: '',
     meta: '',
     altura: '',
-    peso: ''
+    peso: '',
+    ja_treinou: ''
   });
   const [loading, setLoading] = useState(false);
 
@@ -64,7 +79,9 @@ const Perfil: React.FC = () => {
           foto: iniciais,
           dataNascimento: res.data.dataNascimento || '--/--/----',
           meta: res.data.meta || 'Não definida',
-          alturaPeso: res.data.alturaPeso || '-- / --'
+          altura: res.data.altura,
+          peso: res.data.peso,
+          ja_treinou: res.data.ja_treinou || 'Nunca treinou'
         });
       }
     } catch (err) {
@@ -75,30 +92,26 @@ const Perfil: React.FC = () => {
   };
 
   const openModal = () => {
-    const [altura, peso] = profile.alturaPeso.split(' / ');
+    const isTrained = profile.ja_treinou !== 'Nunca treinou';
     setFormData({
       nome: profile.nome,
       email: profile.email,
       dataNascimento: toDateInputValue(profile.dataNascimento),
       meta: profile.meta === 'Não definida' ? '' : profile.meta,
-      altura: altura?.replace('m', '').trim() || '',
-      peso: peso?.replace('kg', '').trim() || ''
+      altura: profile.altura?.toString() || '',
+      peso: profile.peso?.toString() || '',
+      ja_treinou: isTrained ? profile.ja_treinou : ''
     });
+    setHasTrained(isTrained);
     setIsModalOpen(true);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const alturaPesoStr = formData.altura && formData.peso 
-      ? `${formData.altura}m / ${formData.peso}kg` 
-      : profile.alturaPeso;
 
     const payload = {
-      nome: formData.nome,
-      email: formData.email,
-      dataNascimento: formData.dataNascimento,
-      meta: formData.meta,
-      alturaPeso: alturaPesoStr
+      ...formData,
+      ja_treinou: hasTrained ? (formData.ja_treinou || 'Sim') : 'Nunca treinou'
     };
 
     try {
@@ -158,7 +171,14 @@ const Perfil: React.FC = () => {
             <Ruler size={20} className="info-icon" />
             <div className="info-content">
               <span>Altura / Peso</span>
-              <p>{profile.alturaPeso}</p>
+              <p>{profile.altura ? `${profile.altura}m` : '--'} / {profile.peso ? `${profile.peso}kg` : '--'}</p>
+            </div>
+          </div>
+          <div className="info-item">
+            <Settings size={20} className="info-icon" />
+            <div className="info-content">
+              <span>Histórico de Treino</span>
+              <p>{profile.ja_treinou}</p>
             </div>
           </div>
         </div>
@@ -226,7 +246,8 @@ const Perfil: React.FC = () => {
                 <div className="input-group">
                   <label>Altura (m)</label>
                   <input 
-                    type="text" 
+                    type="number"
+                    step="0.01"
                     value={formData.altura}
                     onChange={e => setFormData({...formData, altura: e.target.value})}
                     placeholder="1.75"
@@ -235,13 +256,41 @@ const Perfil: React.FC = () => {
                 <div className="input-group">
                   <label>Peso (kg)</label>
                   <input 
-                    type="text" 
+                    type="number"
+                    step="0.1"
                     value={formData.peso}
                     onChange={e => setFormData({...formData, peso: e.target.value})}
                     placeholder="70"
                   />
                 </div>
               </div>
+              <div className="form-row">
+                <div className="input-group checkbox-group">
+                  <label className="checkbox-label">
+                    <input 
+                      type="checkbox"
+                      checked={hasTrained}
+                      onChange={e => setHasTrained(e.target.checked)}
+                    />
+                    <span>Já treinei anteriormente</span>
+                  </label>
+                </div>
+              </div>
+
+              {hasTrained && (
+                <div className="form-row">
+                  <div className="input-group">
+                    <label>Descrição do Treino</label>
+                    <input 
+                      type="text" 
+                      value={formData.ja_treinou}
+                      onChange={e => setFormData({...formData, ja_treinou: e.target.value})}
+                      placeholder="Ex: Musculação - 2 anos"
+                      required={hasTrained}
+                    />
+                  </div>
+                </div>
+              )}
               <div className="modal-actions">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="btn-secondary">Cancelar</button>
                 <button type="submit" className="btn-primary">Salvar Alterações</button>

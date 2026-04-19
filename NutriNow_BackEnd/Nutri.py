@@ -5,7 +5,6 @@ import logging
 import mysql.connector
 from datetime import datetime
 from typing import List, Optional, Dict
-
 from google import genai
 from google.genai import types, errors
 import time
@@ -79,14 +78,17 @@ class NutritionistAgent:
             cursor = conn.cursor(dictionary=True)
             cursor.execute("""
                 SELECT IFNULL(meta, 'Não definida') as meta, 
-                       IFNULL(altura_peso, 'Não informada') as medidas
+                       altura, peso, ja_treinou
                 FROM perfil WHERE usuario_id = %s
             """, (self.user_id,))
             perfil = cursor.fetchone()
             conn.close()
             
             if perfil:
-                return f"\n\n[CONTEXTO DO USUÁRIO]: Meta: {perfil['meta']} | Medidas: {perfil['medidas']}"
+                contexto = f"\n\n[CONTEXTO DO USUÁRIO]: Meta: {perfil['meta']} | "
+                contexto += f"Altura: {perfil['altura']}m | Peso: {perfil['peso']}kg | "
+                contexto += f"Histórico de Treino: {perfil['ja_treinou']}"
+                return contexto
         except Exception as e:
             logger.error(f"Erro ao buscar contexto do usuário: {e}")
         return ""

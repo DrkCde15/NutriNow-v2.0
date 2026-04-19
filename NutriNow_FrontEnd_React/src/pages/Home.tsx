@@ -1,10 +1,82 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import logo from '../assets/logo.png';
+import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { Calendar, Target, Ruler, Scale, Dumbbell, X, Save } from 'lucide-react';
 import './Home.css';
+import './Perfil.css'; // Redizendo estilos de modal
 
 const Home: React.FC = () => {
+  const { user, loading } = useAuth();
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [formData, setFormData] = useState({
+    dataNascimento: '',
+    meta: '',
+    altura: '',
+    peso: '',
+    ja_treinou: ''
+  });
+  const [hasTrained, setHasTrained] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (user && !loading) {
+      checkProfileCompletion();
+    }
+  }, [user, loading]);
+
+  const checkProfileCompletion = async () => {
+    try {
+      const res = await api.get('/perfil');
+      if (res.data.success) {
+        const { altura, peso, dataNascimento, ja_treinou } = res.data;
+        const defaultDOB = dataNascimento === '01/01/2000';
+        
+        // Verifica se qualquer dado essencial está faltando
+        const isHeightMissing = !altura || parseFloat(altura.toString()) === 0;
+        const isWeightMissing = !peso || parseFloat(peso.toString()) === 0;
+        const isTrainingMissing = !ja_treinou || ja_treinou === 'Nunca treinou';
+
+        const incomplete = isHeightMissing || isWeightMissing || defaultDOB || isTrainingMissing;
+
+        if (incomplete) {
+          const isTrained = ja_treinou && ja_treinou !== 'Nunca treinou';
+          setFormData({
+            dataNascimento: defaultDOB ? '' : dataNascimento,
+            meta: res.data.meta !== 'Não definida' ? res.data.meta : '',
+            altura: altura || '',
+            peso: peso || '',
+            ja_treinou: isTrained ? ja_treinou : ''
+          });
+          setHasTrained(isTrained);
+          setShowCompletionModal(true);
+        }
+      }
+    } catch (err) {
+      console.error('HOME: Erro ao verificar perfil:', err);
+    }
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+
+    const submissionData = {
+      ...formData,
+      ja_treinou: hasTrained ? (formData.ja_treinou || 'Sim') : 'Nunca treinou'
+    };
+
+    try {
+      await api.post('/perfil', submissionData);
+      setShowCompletionModal(false);
+    } catch (err) {
+      console.error('HOME: Erro ao salvar perfil:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const toggleFaq = (index: number) => {
     setActiveFaq(activeFaq === index ? null : index);
@@ -52,7 +124,13 @@ const Home: React.FC = () => {
           </p>
 
           <div className="cta-buttons">
-            <Link to="/cadastro" className="btn-cta-primary">Começar Agora</Link>
+            {loading ? (
+               <div className="btn-cta-primary">Carregando...</div>
+            ) : !user ? (
+               <Link to="/cadastro" className="btn-cta-primary">Começar Agora</Link>
+            ) : (
+               <Link to="/chatbot" className="btn-cta-primary">Ir para o Chat</Link>
+            )}
             <Link to="/chatbot" className="btn-cta-secondary">Conversar com NutriAI</Link>
           </div>
         </div>
@@ -167,6 +245,105 @@ const Home: React.FC = () => {
           </div>
         </div>
       </footer>
+
+      {/* Completion Modal */}
+      {showCompletionModal && (
+        <div className="modal-overlay">
+          <div className="modal-content completion-modal fade-in-up">
+            <div className="modal-header">
+              <h3>🏁 Quase lá! Complete seu perfil</h3>
+              <button onClick={() => setShowCompletionModal(false)} className="close-modal"><X size={20} /></button>
+            </div>
+            <p className="modal-intro">Para que nossa IA possa criar o melhor plano para você, precisamos de alguns detalhes adicionais.</p>
+            
+            <form onSubmit={handleSaveProfile} className="modal-form">
+               <div className="form-row">
+                <div className="input-group">
+                  <label><Calendar size={16} /> Data de Nascimento</label>
+                  <input 
+                    type="date" 
+                    value={formData.dataNascimento}
+                    onChange={e => setFormData({...formData, dataNascimento: e.target.value})}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="input-group">
+                  <label><Target size={16} /> Sua Meta Principal</label>
+                  <input 
+                    type="text" 
+                    value={formData.meta}
+                    onChange={e => setFormData({...formData, meta: e.target.value})}
+                    placeholder="Ex: Perder peso, Ganhar massa"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="input-group">
+                  <label><Ruler size={16} /> Altura (m)</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    value={formData.altura}
+                    onChange={e => setFormData({...formData, altura: e.target.value})}
+                    placeholder="1.75"
+                    required
+                  />
+                </div>
+                <div className="input-group">
+                  <label><Scale size={16} /> Peso (kg)</label>
+                  <input 
+                    type="number" 
+                    step="0.1"
+                    value={formData.peso}
+                    onChange={e => setFormData({...formData, peso: e.target.value})}
+                    placeholder="70.5"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="input-group checkbox-group">
+                  <label className="checkbox-label">
+                    <input 
+                      type="checkbox"
+                      checked={hasTrained}
+                      onChange={e => setHasTrained(e.target.checked)}
+                    />
+                    <span><Dumbbell size={16} /> Já treinou anteriormente?</span>
+                  </label>
+                </div>
+              </div>
+
+              {hasTrained && (
+                <div className="form-row fade-in">
+                  <div className="input-group">
+                    <label>O que você já treinou?</label>
+                    <input 
+                      type="text" 
+                      value={formData.ja_treinou}
+                      onChange={e => setFormData({...formData, ja_treinou: e.target.value})}
+                      placeholder="Ex: Musculação - 1 ano"
+                      required={hasTrained}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="modal-actions">
+                <button type="submit" className="btn-primary" disabled={saving}>
+                   {saving ? 'Salvando...' : <><Save size={18} /> Finalizar Perfil</>}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
