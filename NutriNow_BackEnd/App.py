@@ -54,9 +54,10 @@ def get_google_oauth_hosts():
         certs=data.get("jwks_uri")
     )
 
-# CORS - Dinâmico via FRONTEND_URL
-frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
-CORS(app, resources={r"/*": {"origins": [frontend_url, "http://localhost:5173", "http://localhost:4200"]}}, supports_credentials=True)
+# CORS - Dinâmico via FRONTEND_URL (apenas o domínio para CORS)
+frontend_origin = os.getenv("CORS_ORIGIN", "https://drkcde15.github.io")
+frontend_url = os.getenv("FRONTEND_URL", "https://drkcde15.github.io/NutriNow")
+CORS(app, resources={r"/*": {"origins": [frontend_origin, "http://localhost:5173", "http://localhost:4200"]}}, supports_credentials=True)
 
 # Logging
 logging.basicConfig(level=logging.INFO)
