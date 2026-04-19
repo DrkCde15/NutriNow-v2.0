@@ -54,9 +54,9 @@ def get_google_oauth_hosts():
         certs=data.get("jwks_uri")
     )
 
-# CORS - Atualizado para suportar React (Vite) e opcionalmente o domínio do frontend no .env
-cors_origin = os.getenv("CORS_ORIGIN", "http://localhost:5173")
-CORS(app, resources={r"/*": {"origins": [cors_origin, "http://localhost:5173", "http://localhost:4200"]}}, supports_credentials=True)
+# CORS - Dinâmico via FRONTEND_URL
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+CORS(app, resources={r"/*": {"origins": [frontend_url, "http://localhost:5173", "http://localhost:4200"]}}, supports_credentials=True)
 
 # Logging
 logging.basicConfig(level=logging.INFO)
@@ -184,7 +184,7 @@ def google_login():
 def google_callback():
     code = request.args.get("code")
     if not code:
-        return redirect("http://localhost:5173/login?error=missing_code")
+        return redirect(f"{frontend_url}/login?error=missing_code")
 
     try:
         hosts = get_google_oauth_hosts()
@@ -249,13 +249,13 @@ def google_callback():
             cursor.close()
             conn.close()
             
-            return redirect("http://localhost:5173/")
+            return redirect(f"{frontend_url}/")
         
-        return redirect("http://localhost:5173/login?error=email_not_verified")
+        return redirect(f"{frontend_url}/login?error=email_not_verified")
     
     except Exception as e:
         logger.error(f"Erro no callback do google: {e}")
-        return redirect("http://localhost:5173/login?error=server_error")
+        return redirect(f"{frontend_url}/login?error=server_error")
 
 @app.route("/logout", methods=["POST"])
 def logout():
@@ -381,10 +381,8 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Session-ID')
     response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS,PUT,DELETE')
     return response
+
 #--------------- Envia email e recupera a senha ------------------------
-# -----------------------------
-# Função de envio de email
-# -----------------------------
 def enviar_email(destinatario, assunto, mensagem_html):
     remetente = os.getenv("EMAIL_SENDER", "nnutrinow@gmail.com")
     senha = os.getenv("EMAIL_PASSWORD")
@@ -405,7 +403,6 @@ def enviar_email(destinatario, assunto, mensagem_html):
         logger.error(f"Erro ao enviar email: {e}")
         return False
 
-
 # -----------------------------
 # Endpoint: Esqueci minha senha
 # -----------------------------
@@ -419,7 +416,7 @@ def esqueci_senha():
 
     try:
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)  # <--- aqui
+        cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT id, nome FROM usuarios WHERE email=%s", (email,))
         usuario = cursor.fetchone()
 
@@ -435,7 +432,7 @@ def esqueci_senha():
         """, (usuario['id'], token, expiracao))
         conn.commit()
 
-        link_reset = f"http://localhost:4200/redefinir-senha?token={token}"
+        link_reset = f"{frontend_url}/redefinir-senha?token={token}"
         mensagem_html = f"""
         <html>
         <body>
@@ -458,9 +455,8 @@ def esqueci_senha():
         logger.error(f"Erro MySQL: {err}")
         return jsonify({'error': str(err)}), 500
     finally:
-        if 'cursor' in locals(): cursor.close()
-        if 'conn' in locals(): conn.close()
-
+        if 'cursor' in locals() and cursor: cursor.close()
+        if 'conn' in locals() and conn: conn.close()
 
 # -----------------------------
 # Endpoint: Redefinir senha
@@ -476,7 +472,7 @@ def redefinir_senha():
 
     try:
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)  # <--- aqui
+        cursor = conn.cursor(dictionary=True)
 
         cursor.execute("""
             SELECT usuario_id FROM redefinicao_senha
@@ -498,8 +494,8 @@ def redefinir_senha():
         logger.error(f"Erro MySQL: {err}")
         return jsonify({'error': str(err)}), 500
     finally:
-        if 'cursor' in locals(): cursor.close()
-        if 'conn' in locals(): conn.close()
+        if 'cursor' in locals() and cursor: cursor.close()
+        if 'conn' in locals() and conn: conn.close()
 
 # -----------------------------
 # Endpoint: perfil
@@ -540,8 +536,8 @@ def get_perfil():
         logger.error(f"Erro MySQL ao buscar perfil: {err}")
         return jsonify({"error": str(err)}), 500
     finally:
-        if 'cursor' in locals(): cursor.close()
-        if 'conn' in locals(): conn.close()
+        if 'cursor' in locals() and cursor: cursor.close()
+        if 'conn' in locals() and conn: conn.close()
 
 
 @app.route('/perfil', methods=['POST'])
@@ -568,12 +564,11 @@ def update_perfil():
                 continue
 
         if not parsed_date:
-            return jsonify({"error": "Formato de data inválido. Use yyyy-mm-dd ou dd/mm/yyyy"}), 400
+            return jsonify({"error": "Formato de data inválido. Use yyyy-mm-dd or dd/mm/yyyy"}), 400
 
         data_nascimento = parsed_date.strftime("%Y-%m-%d")
 
     try:
-        # Converte data dd/mm/yyyy → yyyy-mm-dd
         conn = get_db_connection()
         cursor = conn.cursor()
 
@@ -613,8 +608,8 @@ def update_perfil():
         logger.error(f"Erro MySQL ao atualizar perfil: {err}")
         return jsonify({"error": str(err)}), 500
     finally:
-        if 'cursor' in locals(): cursor.close()
-        if 'conn' in locals(): conn.close()
+        if 'cursor' in locals() and cursor: cursor.close()
+        if 'conn' in locals() and conn: conn.close()
 
 
 @app.route('/perfil', methods=['DELETE'])
@@ -639,8 +634,8 @@ def delete_perfil():
         logger.error(f"Erro MySQL ao excluir perfil: {err}")
         return jsonify({"error": str(err)}), 500
     finally:
-        if 'cursor' in locals(): cursor.close()
-        if 'conn' in locals(): conn.close()
+        if 'cursor' in locals() and cursor: cursor.close()
+        if 'conn' in locals() and conn: conn.close()
 
 # ----------------------------- 
 # Endpoint: Dieta-Treino Ajustado
@@ -674,8 +669,8 @@ def get_items():
         print(f"[ERRO][GET] {e}")
         return jsonify({"error": "Falha ao buscar itens"}), 500
     finally:
-        if 'cursor' in locals(): cursor.close()
-        if 'conn' in locals(): conn.close()
+        if 'cursor' in locals() and cursor: cursor.close()
+        if 'conn' in locals() and conn: conn.close()
 
 # ------------------------ POST ------------------------
 @app.route('/dieta-treino', methods=['POST'])
@@ -708,8 +703,8 @@ def add_item():
         print(f"[ERRO][POST] {e}")
         return jsonify({"error": "Falha ao adicionar item"}), 500
     finally:
-        if 'cursor' in locals(): cursor.close()
-        if 'conn' in locals(): conn.close()
+        if 'cursor' in locals() and cursor: cursor.close()
+        if 'conn' in locals() and conn: conn.close()
 
 # ------------------------ PUT ------------------------
 @app.route('/dieta-treino/<int:item_id>', methods=['PUT'])
@@ -747,8 +742,8 @@ def update_item(item_id):
         print(f"[ERRO][PUT] {e}")
         return jsonify({"error": "Falha ao atualizar item"}), 500
     finally:
-        if 'cursor' in locals(): cursor.close()
-        if 'conn' in locals(): conn.close()
+        if 'cursor' in locals() and cursor: cursor.close()
+        if 'conn' in locals() and conn: conn.close()
 
 # ------------------------ DELETE ------------------------
 @app.route('/dieta-treino/<int:item_id>', methods=['DELETE'])
@@ -771,10 +766,8 @@ def delete_item(item_id):
         return jsonify({"success": True, "message": "Item excluído com sucesso!"}), 200
 
     finally:
-        if 'cursor' in locals():
-            cursor.close()
-        if 'conn' in locals():
-            conn.close()
+        if 'cursor' in locals() and cursor: cursor.close()
+        if 'conn' in locals() and conn: conn.close()
 
 # ---------------- Executar ----------------
 if __name__ == "__main__":

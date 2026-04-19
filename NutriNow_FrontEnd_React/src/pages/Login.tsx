@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
 import { Mail, Lock, Eye, EyeOff, HelpCircle } from 'lucide-react';
 import './Login.css';
 
@@ -25,8 +26,8 @@ const Login: React.FC = () => {
 
   const handleGoogleLogin = async () => {
     try {
-      const response = await fetch('http://localhost:8000/auth/login');
-      const data = await response.json();
+      const response = await api.get('/auth/login');
+      const data = response.data;
       if (data.auth_url) {
         window.location.href = data.auth_url;
       }

@@ -22,8 +22,8 @@ const Register: React.FC = () => {
 
   const handleGoogleLogin = async () => {
     try {
-      const response = await fetch('http://localhost:8000/auth/login');
-      const data = await response.json();
+      const response = await api.get('/auth/login');
+      const data = response.data;
       if (data.auth_url) {
         window.location.href = data.auth_url;
       }
