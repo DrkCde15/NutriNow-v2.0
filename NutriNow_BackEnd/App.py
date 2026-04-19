@@ -1,5 +1,6 @@
-from flask import Flask, request, jsonify, session, redirect
+from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
 from Nutri import NutritionistAgent
 import mysql.connector
@@ -24,11 +25,13 @@ app.secret_key = os.getenv("FLASK_SECRET_KEY", "nutrinow_super_secret_key_123")
 # Permitir OAuth2 em localhost (HTTP)
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
-# Configuração de cookies de sessão
+# Configuração de Sessão e JWT
 app.config.update(
-    SESSION_COOKIE_SAMESITE="Lax",  # Funciona bem em localhost
-    SESSION_COOKIE_SECURE=False,    # HTTPS = True, localhost = False
+    JWT_SECRET_KEY=os.getenv("JWT_SECRET_KEY", "nutrinow_jwt_secret_key_999"),
+    JWT_ACCESS_TOKEN_EXPIRES=timedelta(days=30),
 )
+
+jwt = JWTManager(app)
 
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("SECRET_KEY_CLIENT")
@@ -158,13 +161,12 @@ def login():
         if not user or not check_password_hash(user["senha"], senha):
             return jsonify({"error": "Email ou senha inválidos"}), 401
 
-        # Cria sessão Flask
-        session["user_id"] = user["id"]
-        session["user_name"] = user["nome"]
-        session["user_email"] = user["email"]
+        # Gerar Token JWT
+        access_token = create_access_token(identity=str(user["id"]))
 
         return jsonify({
             "message": "Login realizado com sucesso!",
+            "access_token": access_token,
             "user": {"id": user["id"], "nome": user["nome"], "email": user["email"]}
         }), 200
     finally:
@@ -191,7 +193,6 @@ def google_callback():
         hosts = get_google_oauth_hosts()
         token_url, headers, body = client.prepare_token_request(
             token_url=hosts.token_endpoint,
-            # Importante: para http/localhost, remover se der erro na verificação do oauthlib
             authorization_response=request.url,
             redirect_url="http://localhost:8000/auth/callback",
             code=code
@@ -221,7 +222,6 @@ def google_callback():
             user = cursor.fetchone()
             
             if not user:
-                # Criar usuário novo para o OAuth
                 senha_hash = generate_password_hash("oauth_" + secrets.token_hex(8))
                 partes_nome = user_name.split(' ', 1)
                 nome = partes_nome[0]
@@ -243,14 +243,14 @@ def google_callback():
                 
                 # Update nome se for diferente? (opcional)
 
-            session["user_id"] = user_id
-            session["user_name"] = user_nome
-            session["user_email"] = user_email
+            # Gerar Token JWT para o OAuth
+            access_token = create_access_token(identity=str(user_id))
             
             cursor.close()
             conn.close()
             
-            return redirect(f"{frontend_url}/")
+            # Redirecionar com o token na URL (assim o frontend pode salvar no localStorage)
+            return redirect(f"{frontend_url}/?access_token={access_token}&user_id={user_id}&user_name={user_nome}&user_email={user_email}")
         
         return redirect(f"{frontend_url}/login?error=email_not_verified")
     
@@ -259,10 +259,9 @@ def google_callback():
         return redirect(f"{frontend_url}/login?error=server_error")
 
 @app.route("/logout", methods=["POST"])
+@jwt_required()
 def logout():
-    session.clear()
-    # Limpa o cache do agente para este usuário ao deslogar
-    user_id = session.get("user_id")
+    user_id = get_jwt_identity()
     if user_id:
         keys_to_del = [k for k in agent_cache if k.startswith(f"{user_id}_")]
         for k in keys_to_del:
@@ -270,26 +269,43 @@ def logout():
     return jsonify({"message": "Logout realizado"}), 200
 
 @app.route("/me", methods=["GET"])
+@jwt_required()
 def get_me():
-    if "user_id" not in session:
-        return jsonify({"error": "Não autenticado"}), 401
+    user_id = get_jwt_identity()
+    # Buscar dados do usuário no banco para garantir que estão atualizados
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT id, nome, email FROM usuarios WHERE id=%s", (user_id,))
+    user = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    if not user:
+        return jsonify({"error": "Usuário não encontrado"}), 404
+        
     return jsonify({
-        "id": session["user_id"],
-        "nome": session["user_name"],
-        "email": session["user_email"]
+        "id": user["id"],
+        "nome": user["nome"],
+        "email": user["email"]
     }), 200
 
 # ---------------- Rotas do chatbot ----------------
 @app.route("/chat", methods=["POST"])
+@jwt_required()
 def chat():
-    if "user_id" not in session:
-        return jsonify({"error": "Usuário não autenticado"}), 401
+    user_id = get_jwt_identity()
+    # Para o agente, precisamos buscar o email (ou passar no token)
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT email FROM usuarios WHERE id=%s", (user_id,))
+    user_data = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    email = user_data["email"] if user_data else "guest"
 
     data = request.get_json()
-    # Tenta pegar session_id do Header, depois do Body JSON
     session_id = request.headers.get("X-Session-ID") or data.get("session_id") or str(uuid.uuid4())
-    user_id = session.get("user_id")
-    email = session.get("user_email")
     message = data.get("message")
     if not message:
         return jsonify({"error": "Mensagem vazia"}), 400
@@ -299,32 +315,44 @@ def chat():
     return jsonify({"success": True, "session_id": session_id, "response": response_text}), 200
 
 @app.route("/chat_history", methods=["GET"])
+@jwt_required()
 def chat_history():
-    if "user_id" not in session:
-        return jsonify({"error": "Usuário não autenticado"}), 401
-
+    user_id = get_jwt_identity()
     session_id = request.args.get("session_id") or request.headers.get("X-Session-ID")
-    user_id = session.get("user_id")
-    email = session.get("user_email")
+    
+    # Recupera o email para o agente
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT email FROM usuarios WHERE id=%s", (user_id,))
+    user_data = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    email = user_data["email"] if user_data else "guest"
     
     agent = get_agent(session_id=session_id, user_id=user_id, email=email)
     history = agent.get_conversation_history(by_user=True)
     return jsonify({"success": True, "history": history})
 
 @app.route("/analyze_image", methods=["POST", "OPTIONS"])
+@jwt_required()
 def analyze_image():
     if request.method == "OPTIONS":
         return jsonify({"message": "OK"}), 200
 
     try:
-        # Recupera sessão
+        user_id = get_jwt_identity()
+        # Buscar email
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT email FROM usuarios WHERE id=%s", (user_id,))
+        user_data = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        email = user_data["email"] if user_data else "guest"
+
         session_id = request.headers.get('X-Session-ID') or request.form.get('session_id')
-        user_id = session.get("user_id")
-        email = session.get("user_email")
         if not session_id:
             session_id = str(uuid.uuid4())
-        if not user_id:
-            return jsonify({"error": "Usuário não autenticado"}), 401
 
         # Verifica se veio arquivo
         if 'file' not in request.files:
@@ -502,11 +530,9 @@ def redefinir_senha():
 # Endpoint: perfil
 # -----------------------------
 @app.route('/perfil', methods=['GET'])
+@jwt_required()
 def get_perfil():
-    if "user_id" not in session:
-        return jsonify({"error": "Usuário não autenticado"}), 401
-
-    user_id = session["user_id"]
+    user_id = get_jwt_identity()
 
     try:
         conn = get_db_connection()
@@ -542,18 +568,9 @@ def get_perfil():
 
 
 @app.route('/perfil', methods=['POST'])
+@jwt_required()
 def update_perfil():
-    if "user_id" not in session:
-        return jsonify({"error": "Usuário não autenticado"}), 401
-
-    data = request.get_json()
-    nome = data.get('nome')
-    email = data.get('email')
-    data_nascimento = data.get('dataNascimento')
-    meta = data.get('meta')
-    altura_peso = data.get('alturaPeso')
-
-    user_id = session["user_id"]
+    user_id = get_jwt_identity()
 
     if data_nascimento:
         parsed_date = None
@@ -614,11 +631,9 @@ def update_perfil():
 
 
 @app.route('/perfil', methods=['DELETE'])
+@jwt_required()
 def delete_perfil():
-    if "user_id" not in session:
-        return jsonify({"error": "Usuário não autenticado"}), 401
-
-    user_id = session["user_id"]
+    user_id = get_jwt_identity()
 
     try:
         conn = get_db_connection()
@@ -644,11 +659,9 @@ def delete_perfil():
 
 # ------------------------ GET ------------------------
 @app.route('/dieta-treino', methods=['GET'])
+@jwt_required()
 def get_items():
-    if "user_id" not in session:
-        return jsonify({"error": "Usuário não autenticado"}), 401
-
-    user_id = session["user_id"]
+    user_id = get_jwt_identity()
     aba = request.args.get('tipo', 'treinos')
 
     # Normaliza o tipo
@@ -675,21 +688,9 @@ def get_items():
 
 # ------------------------ POST ------------------------
 @app.route('/dieta-treino', methods=['POST'])
+@jwt_required()
 def add_item():
-    if "user_id" not in session:
-        return jsonify({"error": "Usuário não autenticado"}), 401
-
-    data = request.get_json()
-    title = data.get('title')
-    description = data.get('description')
-    time = data.get('time')
-    aba = str(data.get('tipo', '')).lower()
-
-    if not all([title, description, aba]):
-        return jsonify({"error": "Campos obrigatórios ausentes"}), 400
-
-    tipo = 'treino' if 'treino' in aba else 'dieta'
-    user_id = session["user_id"]
+    user_id = get_jwt_identity()
 
     try:
         conn = get_db_connection()
@@ -709,21 +710,9 @@ def add_item():
 
 # ------------------------ PUT ------------------------
 @app.route('/dieta-treino/<int:item_id>', methods=['PUT'])
+@jwt_required()
 def update_item(item_id):
-    if "user_id" not in session:
-        return jsonify({"error": "Usuário não autenticado"}), 401
-
-    data = request.get_json()
-    title = data.get('title')
-    description = data.get('description')
-    time = data.get('time')
-    aba = str(data.get('tipo', '')).lower()
-
-    if not all([title, description, aba]):
-        return jsonify({"error": "Campos obrigatórios ausentes"}), 400
-
-    tipo = 'treino' if 'treino' in aba else 'dieta'
-    user_id = session["user_id"]
+    user_id = get_jwt_identity()
 
     try:
         conn = get_db_connection()
@@ -748,11 +737,9 @@ def update_item(item_id):
 
 # ------------------------ DELETE ------------------------
 @app.route('/dieta-treino/<int:item_id>', methods=['DELETE'])
+@jwt_required()
 def delete_item(item_id):
-    if "user_id" not in session:
-        return jsonify({"error": "Usuário não autenticado"}), 401
-
-    user_id = session["user_id"]
+    user_id = get_jwt_identity()
 
     try:
         conn = get_db_connection()
