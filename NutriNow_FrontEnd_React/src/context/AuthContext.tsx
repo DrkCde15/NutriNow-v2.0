@@ -22,14 +22,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const checkAuth = async () => {
+      // 1. Verificar se existe um token vindo na URL (OAuth callback)
+      const params = new URLSearchParams(window.location.search);
+      const tokenFromUrl = params.get('access_token');
+      
+      if (tokenFromUrl) {
+        localStorage.setItem('nutrinow_token', tokenFromUrl);
+        // Opcional: Pegar dados do usuário da URL também para evitar uma chamada inicial
+        const userFromUrl = {
+          id: parseInt(params.get('user_id') || '0'),
+          nome: params.get('user_name') || '',
+          email: params.get('user_email') || ''
+        };
+        if (userFromUrl.id) {
+          localStorage.setItem('usuario', JSON.stringify(userFromUrl));
+          setUser(userFromUrl);
+        }
+        
+        // Limpar a URL para ficar bonita
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
+      const token = localStorage.getItem('nutrinow_token');
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
       try {
-        // Verifica diretamente com o backend se existe uma sessão válida (necessário para o Google Login)
         const res = await api.get('/me'); 
         setUser(res.data);
         localStorage.setItem('usuario', JSON.stringify(res.data));
       } catch (error) {
-        // Se o backend der erro (401), limpa o localStorage
         localStorage.removeItem('usuario');
+        localStorage.removeItem('nutrinow_token');
         setUser(null);
       } finally {
         setLoading(false);
@@ -42,9 +68,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, senha: string) => {
     try {
       const response = await api.post('/login', { email, senha });
-      if (response.data.user) {
-        setUser(response.data.user);
-        localStorage.setItem('usuario', JSON.stringify(response.data.user));
+      const { user, access_token } = response.data;
+      if (user && access_token) {
+        setUser(user);
+        localStorage.setItem('usuario', JSON.stringify(user));
+        localStorage.setItem('nutrinow_token', access_token);
       }
       return response.data;
     } catch (error) {
@@ -58,6 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setUser(null);
       localStorage.removeItem('usuario');
+      localStorage.removeItem('nutrinow_token');
       localStorage.removeItem('nutrinow_session_id');
     }
   };
