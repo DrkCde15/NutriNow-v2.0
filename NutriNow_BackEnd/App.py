@@ -13,6 +13,7 @@ import requests
 import json
 from oauthlib.oauth2 import WebApplicationClient
 from dataclasses import dataclass
+from contextlib import contextmanager
 
 # ---------------- Configurações ----------------
 app = Flask(__name__)
@@ -78,6 +79,16 @@ def get_db_connection():
         database=os.getenv('MYSQL_DATABASE', 'nutrinow2')
     )
 
+@contextmanager
+def get_db():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        yield cursor, conn
+    finally:
+        cursor.close()
+        conn.close()
+
 # ---------------- Cache de agentes ----------------
 agent_cache = {}
 def get_agent(session_id: str, user_id: int = None, email: str = None):
@@ -111,39 +122,30 @@ def cadastro():
     cursor = None
 
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
+        with get_db() as (cursor, conn):
+            # Verifica se o email já existe
+            cursor.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
+            if cursor.fetchone():
+                return jsonify({"error": "Email já cadastrado"}), 409
 
-        # Verifica se o email já existe
-        cursor.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
-        if cursor.fetchone():
-            return jsonify({"error": "Email já cadastrado"}), 409
+            # Cria hash da senha
+            senha_hash = generate_password_hash(senha)
 
-        # Cria hash da senha
-        senha_hash = generate_password_hash(senha)
+            # Insere o usuário no banco
+            cursor.execute("""
+                INSERT INTO usuarios (nome, sobrenome, data_nascimento, genero, email, senha)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (nome, sobrenome, data_nascimento, genero, email, senha_hash))
+            conn.commit()
 
-        # Insere o usuário no banco
-        cursor.execute("""
-            INSERT INTO usuarios (nome, sobrenome, data_nascimento, genero, email, senha)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (nome, sobrenome, data_nascimento, genero, email, senha_hash))
-        conn.commit()
-
-        return jsonify({"message": "Conta criada com sucesso!"}), 201
+            return jsonify({"message": "Conta criada com sucesso!"}), 201
 
     except mysql.connector.Error as e:
         logger.error(f"Erro MySQL: {e}")
         return jsonify({"error": "Erro no banco de dados"}), 500
-
     except Exception as e:
         logger.error(f"Erro ao criar conta: {e}")
         return jsonify({"error": "Erro interno ao criar conta"}), 500
-
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
 
 @app.route("/login", methods=["POST"])
 def login():
@@ -154,24 +156,23 @@ def login():
         return jsonify({"error": "Email e senha são obrigatórios"}), 400
 
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT id, nome, email, senha FROM usuarios WHERE email=%s", (email,))
-        user = cursor.fetchone()
-        if not user or not check_password_hash(user["senha"], senha):
-            return jsonify({"error": "Email ou senha inválidos"}), 401
+        with get_db() as (cursor, conn):
+            cursor.execute("SELECT id, nome, email, senha FROM usuarios WHERE email=%s", (email,))
+            user = cursor.fetchone()
+            if not user or not check_password_hash(user["senha"], senha):
+                return jsonify({"error": "Email ou senha inválidos"}), 401
 
-        # Gerar Token JWT
-        access_token = create_access_token(identity=str(user["id"]))
+            # Gerar Token JWT
+            access_token = create_access_token(identity=str(user["id"]))
 
-        return jsonify({
-            "message": "Login realizado com sucesso!",
-            "access_token": access_token,
-            "user": {"id": user["id"], "nome": user["nome"], "email": user["email"]}
-        }), 200
-    finally:
-        cursor.close()
-        conn.close()
+            return jsonify({
+                "message": "Login realizado com sucesso!",
+                "access_token": access_token,
+                "user": {"id": user["id"], "nome": user["nome"], "email": user["email"]}
+            }), 200
+    except Exception as e:
+        logger.error(f"Erro no login: {e}")
+        return jsonify({"error": "Erro interno do servidor"}), 500
 
 @app.route("/auth/login", methods=["GET"])
 def google_login():
@@ -535,42 +536,42 @@ def get_perfil():
     user_id = get_jwt_identity()
 
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
+        with get_db() as (cursor, conn):
+            cursor.execute("""
+                SELECT u.nome, u.email, u.data_nascimento, 
+                       IFNULL(p.meta, 'Não definida') AS meta, 
+                       IFNULL(p.altura_peso, '-- / --') AS altura_peso
+                FROM usuarios u
+                LEFT JOIN perfil p ON u.id = p.usuario_id
+                WHERE u.id = %s
+            """, (user_id,))
+            user = cursor.fetchone()
+            if not user:
+                return jsonify({"error": "Usuário não encontrado"}), 404
 
-        cursor.execute("""
-            SELECT u.nome, u.email, u.data_nascimento, 
-                   IFNULL(p.meta, 'Não definida') AS meta, 
-                   IFNULL(p.altura_peso, '-- / --') AS altura_peso
-            FROM usuarios u
-            LEFT JOIN perfil p ON u.id = p.usuario_id
-            WHERE u.id = %s
-        """, (user_id,))
-        user = cursor.fetchone()
-        if not user:
-            return jsonify({"error": "Usuário não encontrado"}), 404
-
-        return jsonify({
-            "success": True,
-            "nome": user["nome"],
-            "email": user["email"],
-            "dataNascimento": user["data_nascimento"].strftime("%d/%m/%Y") if user["data_nascimento"] else "--/--/----",
-            "meta": user["meta"],
-            "alturaPeso": user["altura_peso"]
-        }), 200
-
-    except mysql.connector.Error as err:
-        logger.error(f"Erro MySQL ao buscar perfil: {err}")
-        return jsonify({"error": str(err)}), 500
-    finally:
-        if 'cursor' in locals() and cursor: cursor.close()
-        if 'conn' in locals() and conn: conn.close()
+            return jsonify({
+                "success": True,
+                "nome": user["nome"],
+                "email": user["email"],
+                "dataNascimento": user["data_nascimento"].strftime("%d/%m/%Y") if user["data_nascimento"] else "--/--/----",
+                "meta": user["meta"],
+                "alturaPeso": user["altura_peso"]
+            }), 200
+    except Exception as e:
+        logger.error(f"Erro ao buscar perfil: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/perfil', methods=['POST'])
 @jwt_required()
 def update_perfil():
     user_id = get_jwt_identity()
+    data = request.get_json()
+    nome = data.get('nome')
+    email = data.get('email')
+    data_nascimento = data.get('dataNascimento')
+    meta = data.get('meta')
+    altura_peso = data.get('alturaPeso')
 
     if data_nascimento:
         parsed_date = None
@@ -587,47 +588,41 @@ def update_perfil():
         data_nascimento = parsed_date.strftime("%Y-%m-%d")
 
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        with get_db() as (cursor, conn):
+            # Atualiza tabela usuarios
+            if any([nome, email, data_nascimento]):
+                query_parts = []
+                params = []
+                if nome:
+                    query_parts.append("nome=%s")
+                    params.append(nome)
+                if email:
+                    query_parts.append("email=%s")
+                    params.append(email)
+                if data_nascimento:
+                    query_parts.append("data_nascimento=%s")
+                    params.append(data_nascimento)
+                params.append(user_id)
+                cursor.execute(f"UPDATE usuarios SET {', '.join(query_parts)} WHERE id=%s", tuple(params))
 
-        # Atualiza tabela usuarios
-        if any([nome, email, data_nascimento]):
-            query_parts = []
-            params = []
-            if nome:
-                query_parts.append("nome=%s")
-                params.append(nome)
-            if email:
-                query_parts.append("email=%s")
-                params.append(email)
-            if data_nascimento:
-                query_parts.append("data_nascimento=%s")
-                params.append(data_nascimento)
-            params.append(user_id)
-            cursor.execute(f"UPDATE usuarios SET {', '.join(query_parts)} WHERE id=%s", tuple(params))
+            # Atualiza ou insere tabela perfil
+            cursor.execute("SELECT usuario_id FROM perfil WHERE usuario_id=%s", (user_id,))
+            if cursor.fetchone():
+                cursor.execute(
+                    "UPDATE perfil SET meta=%s, altura_peso=%s WHERE usuario_id=%s",
+                    (meta, altura_peso, user_id)
+                )
+            else:
+                cursor.execute(
+                    "INSERT INTO perfil (usuario_id, meta, altura_peso) VALUES (%s, %s, %s)",
+                    (user_id, meta, altura_peso)
+                )
 
-        # Atualiza ou insere tabela perfil
-        cursor.execute("SELECT usuario_id FROM perfil WHERE usuario_id=%s", (user_id,))
-        if cursor.fetchone():
-            cursor.execute(
-                "UPDATE perfil SET meta=%s, altura_peso=%s WHERE usuario_id=%s",
-                (meta, altura_peso, user_id)
-            )
-        else:
-            cursor.execute(
-                "INSERT INTO perfil (usuario_id, meta, altura_peso) VALUES (%s, %s, %s)",
-                (user_id, meta, altura_peso)
-            )
-
-        conn.commit()
-        return jsonify({"success": True, "message": "Perfil atualizado com sucesso!"}), 200
-
-    except mysql.connector.Error as err:
-        logger.error(f"Erro MySQL ao atualizar perfil: {err}")
-        return jsonify({"error": str(err)}), 500
-    finally:
-        if 'cursor' in locals() and cursor: cursor.close()
-        if 'conn' in locals() and conn: conn.close()
+            conn.commit()
+            return jsonify({"success": True, "message": "Perfil atualizado com sucesso!"}), 200
+    except Exception as e:
+        logger.error(f"Erro ao atualizar perfil: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/perfil', methods=['DELETE'])
@@ -636,22 +631,15 @@ def delete_perfil():
     user_id = get_jwt_identity()
 
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        with get_db() as (cursor, conn):
+            cursor.execute("DELETE FROM perfil WHERE usuario_id=%s", (user_id,))
+            cursor.execute("DELETE FROM usuarios WHERE id=%s", (user_id,))
+            conn.commit()
 
-        cursor.execute("DELETE FROM perfil WHERE usuario_id=%s", (user_id,))
-        cursor.execute("DELETE FROM usuarios WHERE id=%s", (user_id,))
-        conn.commit()
-
-        session.clear()
-        return jsonify({"success": True, "message": "Conta e perfil excluídos com sucesso!"}), 200
-
-    except mysql.connector.Error as err:
-        logger.error(f"Erro MySQL ao excluir perfil: {err}")
-        return jsonify({"error": str(err)}), 500
-    finally:
-        if 'cursor' in locals() and cursor: cursor.close()
-        if 'conn' in locals() and conn: conn.close()
+            return jsonify({"success": True, "message": "Conta e perfil excluídos com sucesso!"}), 200
+    except Exception as e:
+        logger.error(f"Erro ao excluir perfil: {e}")
+        return jsonify({"error": str(e)}), 500
 
 # ----------------------------- 
 # Endpoint: Dieta-Treino Ajustado
@@ -692,6 +680,17 @@ def get_items():
 def add_item():
     user_id = get_jwt_identity()
 
+    data = request.get_json()
+    title = data.get('title')
+    description = data.get('description')
+    time = data.get('time')
+    aba = str(data.get('tipo', '')).lower()
+
+    if not all([title, description, aba]):
+        return jsonify({"error": "Campos obrigatórios ausentes"}), 400
+
+    tipo = 'treino' if 'treino' in aba else 'dieta'
+
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -713,6 +712,17 @@ def add_item():
 @jwt_required()
 def update_item(item_id):
     user_id = get_jwt_identity()
+
+    data = request.get_json()
+    title = data.get('title')
+    description = data.get('description')
+    time = data.get('time')
+    aba = str(data.get('tipo', '')).lower()
+
+    if not all([title, description, aba]):
+        return jsonify({"error": "Campos obrigatórios ausentes"}), 400
+
+    tipo = 'treino' if 'treino' in aba else 'dieta'
 
     try:
         conn = get_db_connection()
