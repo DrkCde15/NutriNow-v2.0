@@ -7,7 +7,7 @@ import { AUTH_STORAGE_KEY, useAuth } from "@/lib/auth";
 export const Route = createFileRoute("/login")({
   beforeLoad: () => {
     if (typeof window !== "undefined" && localStorage.getItem(AUTH_STORAGE_KEY)) {
-      throw redirect({ to: "/planos" });
+      throw redirect({ to: "/" });
     }
   },
   component: LoginPage,
@@ -33,7 +33,7 @@ function LoginPage() {
     setLoading(true);
     try {
       await login(email, senha);
-      navigate({ to: "/planos" });
+      navigate({ to: "/" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao entrar");
     } finally {

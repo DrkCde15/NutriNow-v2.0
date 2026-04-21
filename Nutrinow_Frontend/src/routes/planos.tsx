@@ -9,7 +9,7 @@ export const Route = createFileRoute("/planos")({
   component: PlanosPage,
   head: () => ({
     meta: [
-      { title: "Meus planos â€” NutriNow" },
+      { title: "Meus planos no NutriNow" },
       { name: "description", content: "Gerencie suas dietas e treinos personalizados." },
     ],
   }),
@@ -53,7 +53,12 @@ function PlanosPage() {
       });
       setItems(result.items ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao carregar planos");
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("Falha ao buscar itens") || (err as any).status === 404) {
+        setItems([]);
+      } else {
+        setError(msg || "Erro ao carregar planos");
+      }
     } finally {
       setLoading(false);
     }

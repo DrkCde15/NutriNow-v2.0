@@ -163,8 +163,8 @@ class NutritionistAgent:
             
             full_prompt += f"User: {text}\nAssistant:"
 
-            # 3. Gera Resposta com Gemini (com Retry para 429)
-            max_retries = 3
+            # 3. Gera Resposta com Gemini (com Retry para 429 e 503)
+            max_retries = 5
             for attempt in range(max_retries):
                 try:
                     response = self.client.models.generate_content(
@@ -176,7 +176,7 @@ class NutritionistAgent:
                     break # Sucesso!
                 except Exception as e:
                     if ("429" in str(e) or "503" in str(e)) and attempt < max_retries - 1:
-                        wait_time = 2 ** attempt # Exponential backoff: 1, 2, 4s
+                        wait_time = (2 ** attempt) * 2 # Exponential backoff: 2, 4, 8, 16s
                         tipo_erro = "Cota atingida (429)" if "429" in str(e) else "Servidor ocupado (503)"
                         logger.warning(f"{tipo_erro}. Tentando novamente em {wait_time}s...")
                         time.sleep(wait_time)

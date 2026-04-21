@@ -7,7 +7,6 @@ import logo from "@/assets/logo.png";
 const privateLinks = [
   { to: "/planos" as const, label: "Dietas e Treinos" },
   { to: "/chat" as const, label: "Chat NutriAI" },
-  { to: "/perfil" as const, label: "Perfil" },
 ];
 
 export function SiteHeader() {
@@ -44,9 +43,12 @@ export function SiteHeader() {
         <div className="hidden items-center gap-3 md:flex">
           {user ? (
             <>
-              <span className="flex items-center gap-2 rounded-full bg-secondary px-3 py-1.5 text-sm font-medium">
+              <Link
+                to="/perfil"
+                className="flex items-center gap-2 rounded-full bg-secondary px-3 py-1.5 text-sm font-medium transition-smooth hover:bg-secondary/80"
+              >
                 <User className="h-4 w-4" /> {user.nome.split(" ")[0]}
-              </span>
+              </Link>
               <button
                 onClick={logout}
                 className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground transition-smooth hover:bg-secondary"
@@ -96,15 +98,24 @@ export function SiteHeader() {
             ))}
             <div className="mt-2 flex flex-col gap-2 border-t border-border pt-3">
               {user ? (
-                <button
-                  onClick={() => {
-                    logout();
-                    setOpen(false);
-                  }}
-                  className="rounded-xl border border-border px-3 py-2.5 text-sm font-medium"
-                >
-                  Sair ({user.nome.split(" ")[0]})
-                </button>
+                <>
+                  <Link
+                    to="/perfil"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm font-medium"
+                  >
+                    <User className="h-4 w-4" /> Perfil ({user.nome.split(" ")[0]})
+                  </Link>
+                  <button
+                    onClick={() => {
+                      logout();
+                      setOpen(false);
+                    }}
+                    className="rounded-xl border border-border px-3 py-2.5 text-sm font-medium"
+                  >
+                    Sair
+                  </button>
+                </>
               ) : (
                 <>
                   <Link

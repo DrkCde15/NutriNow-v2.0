@@ -26,10 +26,10 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
-          cache-dependency-path: NutriNow_FrontEnd_React/package-lock.json
+          cache-dependency-path: Nutrinow_Frontend/package-lock.json
 
       - name: Install and Build 🏗️
-        working-directory: NutriNow_FrontEnd_React
+        working-directory: Nutrinow_Frontend
         run: |
           npm install
           npm run build
@@ -37,7 +37,7 @@ jobs:
       - name: Upload Artifact 📦
         uses: actions/upload-pages-artifact@v3
         with:
-          path: NutriNow_FrontEnd_React/dist
+          path: Nutrinow_Frontend/dist
 
   deploy:
     needs: build

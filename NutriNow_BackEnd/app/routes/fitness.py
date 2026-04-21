@@ -19,7 +19,7 @@ def get_items():
             cursor.execute("""
                 SELECT id, title, description, time, tipo, created_at, updated_at
                 FROM dieta_treino
-                WHERE usuario_id=%s AND tipo=%s
+                WHERE user_id=%s AND tipo=%s
                 ORDER BY created_at ASC
             """, (user_id, tipo))
             items = cursor.fetchall()
@@ -45,7 +45,7 @@ def add_item():
     try:
         with get_db() as (cursor, conn):
             cursor.execute("""
-                INSERT INTO dieta_treino (usuario_id, tipo, title, description, time)
+                INSERT INTO dieta_treino (user_id, tipo, title, description, time)
                 VALUES (%s, %s, %s, %s, %s)
             """, (user_id, tipo, title, description, time))
             conn.commit()
@@ -70,7 +70,7 @@ def update_item(item_id):
             cursor.execute("""
                 UPDATE dieta_treino
                 SET title=%s, description=%s, time=%s, tipo=%s, updated_at=%s
-                WHERE id=%s AND usuario_id=%s
+                WHERE id=%s AND user_id=%s
             """, (title, description, time, tipo, datetime.now(), item_id, user_id))
             conn.commit()
             if cursor.rowcount == 0:
@@ -86,7 +86,7 @@ def delete_item(item_id):
     user_id = get_jwt_identity()
     try:
         with get_db() as (cursor, conn):
-            cursor.execute("DELETE FROM dieta_treino WHERE id = %s AND usuario_id = %s", (item_id, user_id))
+            cursor.execute("DELETE FROM dieta_treino WHERE id = %s AND user_id = %s", (item_id, user_id))
             conn.commit()
             return jsonify({"success": True, "message": "Item excluído com sucesso!"}), 200
     except Exception as e:

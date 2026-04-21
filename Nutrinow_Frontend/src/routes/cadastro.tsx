@@ -1,14 +1,19 @@
 import { useState, type FormEvent } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, redirect } from "@tanstack/react-router";
 import { Mail, Lock, User, UserPlus, AlertCircle, Check } from "lucide-react";
 import { AuthShell, Field, inputClass, primaryButtonClass } from "@/components/auth-shell";
-import { useAuth } from "@/lib/auth";
+import { AUTH_STORAGE_KEY, useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/cadastro")({
+  beforeLoad: () => {
+    if (typeof window !== "undefined" && localStorage.getItem(AUTH_STORAGE_KEY)) {
+      throw redirect({ to: "/" });
+    }
+  },
   component: CadastroPage,
   head: () => ({
     meta: [
-      { title: "Criar conta â€” NutriNow" },
+      { title: "Criar conta no NutriNow" },
       { name: "description", content: "Crie sua conta NutriNow gratis e receba um plano personalizado." },
     ],
   }),
@@ -49,7 +54,7 @@ function CadastroPage() {
         peso: peso ? Number(peso) : undefined,
         ja_treinou: jaTreinou,
       });
-      navigate({ to: "/planos" });
+      navigate({ to: "/" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao cadastrar");
     } finally {
@@ -77,7 +82,7 @@ function CadastroPage() {
               type="text"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
-              placeholder="Maria"
+              placeholder="Nome"
               className={inputClass}
               required
             />
@@ -87,7 +92,7 @@ function CadastroPage() {
               type="text"
               value={sobrenome}
               onChange={(e) => setSobrenome(e.target.value)}
-              placeholder="Silva"
+              placeholder="Sobrenome"
               className={inputClass}
               required
             />
@@ -111,7 +116,7 @@ function CadastroPage() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="seu@email.com"
+            placeholder="Email"
             className={inputClass}
             required
           />
@@ -129,7 +134,7 @@ function CadastroPage() {
             type="password"
             value={senha}
             onChange={(e) => setSenha(e.target.value)}
-            placeholder="********"
+            placeholder="Senha"
             className={inputClass}
             required
           />
@@ -141,7 +146,7 @@ function CadastroPage() {
               type="text"
               value={meta}
               onChange={(e) => setMeta(e.target.value)}
-              placeholder="Ex: Ganho de massa"
+              placeholder="Meta"
               className={inputClass}
             />
           </Field>

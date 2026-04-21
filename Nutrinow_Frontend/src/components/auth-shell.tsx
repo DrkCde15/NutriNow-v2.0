@@ -47,11 +47,11 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
             </blockquote>
             <div className="mt-6 flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20 font-semibold">
-                M
+                A
               </span>
               <div>
-                <p className="text-sm font-semibold">Marina S.</p>
-                <p className="text-xs text-primary-foreground/70">Estudante</p>
+                <p className="text-sm font-semibold">Amanda S.</p>
+                <p className="text-xs text-primary-foreground/70">Estudante de Nutrição</p>
               </div>
             </div>
           </div>
