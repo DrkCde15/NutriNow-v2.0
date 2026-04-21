@@ -39,8 +39,11 @@ def get_google_oauth_hosts():
         certs=data.get("jwks_uri")
     )
 
-@auth_bp.route("/cadastro", methods=["POST"])
+@auth_bp.route("/cadastro", methods=["POST", "OPTIONS"])
 def cadastro():
+    if request.method == "OPTIONS":
+        return jsonify({"message": "OK"}), 200
+
     data = request.get_json()
     nome = data.get("nome")
     sobrenome = data.get("sobrenome")
@@ -81,8 +84,11 @@ def cadastro():
         logger.error(f"Erro ao criar conta: {e}")
         return jsonify({"error": "Erro interno ao criar conta"}), 500
 
-@auth_bp.route("/login", methods=["POST"])
+@auth_bp.route("/login", methods=["POST", "OPTIONS"])
 def login():
+    if request.method == "OPTIONS":
+        return jsonify({"message": "OK"}), 200
+
     data = request.get_json()
     email = data.get("email")
     senha = data.get("senha")
@@ -233,7 +239,7 @@ def esqueci_senha():
                          (usuario['id'], token, expiracao))
             conn.commit()
 
-            link_reset = f"{os.getenv('FRONTEND_URL')}/redefinir-senha?token={token}"
+            link_reset = f"{os.getenv('FRONTEND_URL')}/reset-senha?token={token}"
             mensagem_html = f"<html><body><h2>Redefinição de Senha</h2><p>Olá, {usuario['nome']}!</p><a href='{link_reset}'>Redefinir senha</a></body></html>"
             
             if envoyer_email(email, "Recuperação de Senha - NutriNow", mensagem_html):
