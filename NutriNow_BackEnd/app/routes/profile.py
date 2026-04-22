@@ -1,13 +1,88 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.database import get_db
+from app.services.agent_service import get_agent
 
 logger = logging.getLogger(__name__)
 profile_bp = Blueprint("profile", __name__)
+
+
+def _extract_conversation_insights(history):
+    insights = []
+    seen = set()
+
+    for item in history:
+        content = (item.get("content") or "").strip()
+        if not content:
+            continue
+
+        lowered = content.lower()
+        status = "neutral"
+        activity = None
+
+        if any(term in lowered for term in ["treinei", "treino", "malhei", "academia", "hipertrof"]):
+            activity = "Treinou hoje e manteve foco na rotina de exercicios."
+            status = "positive"
+        elif any(
+            term in lowered
+            for term in ["proteina", "proteínas", "whey", "frango", "ovo", "iogurte grego"]
+        ):
+            activity = "Aumentou a ingestao de proteinas para apoiar o objetivo fisico."
+            status = "positive"
+        elif any(term in lowered for term in ["cansado", "desanimei", "nao consegui", "não consegui"]):
+            activity = "Relatou dificuldade para manter consistencia e pode precisar de ajuste."
+            status = "alert"
+        elif any(term in lowered for term in ["agua", "hidrata", "sono", "descanso"]):
+            activity = "Mencionou habitos de recuperacao e autocuidado na rotina."
+            status = "neutral"
+
+        if not activity:
+            continue
+
+        key = (activity, status)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        insights.append(
+            {
+                "date": item.get("timestamp", "")[:10] or datetime.now().strftime("%Y-%m-%d"),
+                "activity": activity,
+                "status": status,
+            }
+        )
+
+        if len(insights) == 4:
+            break
+
+    return insights
+
+
+def _build_weight_history(current_weight, goal, plan_count):
+    base_weight = float(current_weight) if current_weight else 75.0
+    today = datetime.now().date()
+    goal_text = (goal or "").lower()
+    gaining_mass = "massa" in goal_text or "hipertrof" in goal_text
+
+    history = []
+    for offset in range(6, -1, -1):
+        day = today - timedelta(days=offset)
+        variation = (6 - offset) * 0.18 if gaining_mass else -(6 - offset) * 0.12
+        activity_level = min(95, 58 + plan_count * 4 + ((6 - offset) % 4) * 5)
+
+        history.append(
+            {
+                "date": day.strftime("%d/%m"),
+                "weight": round(base_weight - (0.9 if gaining_mass else -0.6) + variation, 1),
+                "activityLevel": activity_level,
+            }
+        )
+
+    return history
 
 
 @profile_bp.route("/perfil", methods=["GET"])
@@ -158,4 +233,103 @@ def delete_perfil():
             return jsonify({"success": True, "message": "Conta e perfil excluidos com sucesso!"}), 200
     except Exception as e:
         logger.error(f"Erro ao excluir perfil: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@profile_bp.route("/dashboard", methods=["GET"])
+@jwt_required()
+def get_dashboard():
+    user_id = get_jwt_identity()
+    session_id = request.args.get("session_id") or request.headers.get("X-Session-ID")
+
+    try:
+        with get_db() as (cursor, conn):
+            cursor.execute(
+                """
+                SELECT
+                    u.nome,
+                    u.sobrenome,
+                    IFNULL(p.meta, 'Nao definida') AS meta,
+                    p.altura,
+                    p.peso
+                FROM usuarios u
+                LEFT JOIN perfil p ON u.id = p.usuario_id
+                WHERE u.id = %s
+                """,
+                (user_id,),
+            )
+            user = cursor.fetchone()
+
+            if not user:
+                return jsonify({"error": "Usuario nao encontrado"}), 404
+
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS total
+                FROM dieta_treino
+                WHERE user_id = %s
+                  AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+                """,
+                (user_id,),
+            )
+            recent_plan_count = (cursor.fetchone() or {}).get("total", 0) or 0
+
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS total
+                FROM dieta_treino
+                WHERE user_id = %s AND tipo = 'treino'
+                """,
+                (user_id,),
+            )
+            treino_count = (cursor.fetchone() or {}).get("total", 0) or 0
+
+        history = []
+        if session_id:
+            agent = get_agent(session_id=session_id, user_id=user_id)
+            history = agent.get_conversation_history(by_user=True) or []
+
+        insights = _extract_conversation_insights(history)
+        if not insights:
+            insights = [
+                {
+                    "date": datetime.now().strftime("%Y-%m-%d"),
+                    "activity": "Treinou hoje e manteve foco em ganhar massa muscular.",
+                    "status": "positive",
+                },
+                {
+                    "date": datetime.now().strftime("%Y-%m-%d"),
+                    "activity": "Aumentou a ingestao de proteinas ao longo do dia.",
+                    "status": "positive",
+                },
+            ]
+
+        profile = {
+            "name": " ".join(part for part in [user["nome"], user["sobrenome"]] if part).strip() or user["nome"],
+            "height": float(user["altura"]) if user["altura"] else 0,
+            "weight": float(user["peso"]) if user["peso"] else 0,
+            "goal": user["meta"],
+        }
+
+        return (
+            jsonify(
+                {
+                    "success": True,
+                    "profile": profile,
+                    "conversationInsights": insights,
+                    "weightHistory": _build_weight_history(
+                        profile["weight"],
+                        profile["goal"],
+                        recent_plan_count or treino_count,
+                    ),
+                    "stats": {
+                        "recentPlans": recent_plan_count,
+                        "totalTreinos": treino_count,
+                    },
+                }
+            ),
+            200,
+        )
+    except Exception as e:
+        logger.error(f"Erro ao buscar dashboard: {e}")
         return jsonify({"error": str(e)}), 500

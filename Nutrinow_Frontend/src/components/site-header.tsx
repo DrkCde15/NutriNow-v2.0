@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth";
 import logo from "@/assets/logo.png";
 
 const privateLinks = [
+  { to: "/dashboard" as const, label: "Dashboard" },
   { to: "/planos" as const, label: "Dietas e Treinos" },
   { to: "/chat" as const, label: "Chat NutriAI" },
 ];

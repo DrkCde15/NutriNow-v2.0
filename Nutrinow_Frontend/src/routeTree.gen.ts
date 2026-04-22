@@ -14,6 +14,7 @@ import { Route as PlanosRouteImport } from './routes/planos'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as EsqueciSenhaRouteImport } from './routes/esqueci-senha'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as CadastroRouteImport } from './routes/cadastro'
 import { Route as IndexRouteImport } from './routes/index'
@@ -43,6 +44,11 @@ const EsqueciSenhaRoute = EsqueciSenhaRouteImport.update({
   path: '/esqueci-senha',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ChatRoute = ChatRouteImport.update({
   id: '/chat',
   path: '/chat',
@@ -63,6 +69,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cadastro': typeof CadastroRoute
   '/chat': typeof ChatRoute
+  '/dashboard': typeof DashboardRoute
   '/esqueci-senha': typeof EsqueciSenhaRoute
   '/login': typeof LoginRoute
   '/perfil': typeof PerfilRoute
@@ -73,6 +80,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/cadastro': typeof CadastroRoute
   '/chat': typeof ChatRoute
+  '/dashboard': typeof DashboardRoute
   '/esqueci-senha': typeof EsqueciSenhaRoute
   '/login': typeof LoginRoute
   '/perfil': typeof PerfilRoute
@@ -84,6 +92,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/cadastro': typeof CadastroRoute
   '/chat': typeof ChatRoute
+  '/dashboard': typeof DashboardRoute
   '/esqueci-senha': typeof EsqueciSenhaRoute
   '/login': typeof LoginRoute
   '/perfil': typeof PerfilRoute
@@ -96,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/cadastro'
     | '/chat'
+    | '/dashboard'
     | '/esqueci-senha'
     | '/login'
     | '/perfil'
@@ -106,6 +116,7 @@ export interface FileRouteTypes {
     | '/'
     | '/cadastro'
     | '/chat'
+    | '/dashboard'
     | '/esqueci-senha'
     | '/login'
     | '/perfil'
@@ -116,6 +127,7 @@ export interface FileRouteTypes {
     | '/'
     | '/cadastro'
     | '/chat'
+    | '/dashboard'
     | '/esqueci-senha'
     | '/login'
     | '/perfil'
@@ -127,6 +139,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CadastroRoute: typeof CadastroRoute
   ChatRoute: typeof ChatRoute
+  DashboardRoute: typeof DashboardRoute
   EsqueciSenhaRoute: typeof EsqueciSenhaRoute
   LoginRoute: typeof LoginRoute
   PerfilRoute: typeof PerfilRoute
@@ -171,6 +184,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EsqueciSenhaRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/chat': {
       id: '/chat'
       path: '/chat'
@@ -199,6 +219,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CadastroRoute: CadastroRoute,
   ChatRoute: ChatRoute,
+  DashboardRoute: DashboardRoute,
   EsqueciSenhaRoute: EsqueciSenhaRoute,
   LoginRoute: LoginRoute,
   PerfilRoute: PerfilRoute,
