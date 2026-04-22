@@ -9,7 +9,7 @@ export const Route = createFileRoute("/planos")({
   component: PlanosPage,
   head: () => ({
     meta: [
-      { title: "Meus planos no NutriNow" },
+      { title: "Meus planos - NutriNow" },
       { name: "description", content: "Gerencie suas dietas e treinos personalizados." },
     ],
   }),

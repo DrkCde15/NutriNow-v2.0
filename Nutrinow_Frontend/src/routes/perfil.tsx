@@ -9,7 +9,7 @@ export const Route = createFileRoute("/perfil")({
   component: PerfilPage,
   head: () => ({
     meta: [
-      { title: "Meu perfil â€” NutriNow" },
+      { title: "Meu perfil - NutriNow" },
       { name: "description", content: "Gerencie seu perfil, avatar e preferencias no NutriNow." },
     ],
   }),

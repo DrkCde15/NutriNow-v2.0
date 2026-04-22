@@ -9,7 +9,7 @@ export const Route = createFileRoute("/chat")({
   component: ChatPage,
   head: () => ({
     meta: [
-      { title: "Chat NutriAI â€” NutriNow" },
+      { title: "Chat NutriAI - NutriNow" },
       { name: "description", content: "Converse com a NutriAI sobre nutricao e treinos." },
     ],
   }),
