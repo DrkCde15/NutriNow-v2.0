@@ -12,11 +12,11 @@ from app.routes.fitness import fitness_bp
 def _build_allowed_origins():
     defaults = [
         "https://drkcde15.github.io",
+        "https://nutrinow-app.jcesarsantana215.workers.dev",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:4200",
         "http://127.0.0.1:4200",
-        # ADICIONE SE ESTIVER USANDO 8080
         "http://localhost:8080",
         "http://127.0.0.1:8080",
     ]

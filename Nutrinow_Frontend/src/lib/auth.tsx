@@ -99,6 +99,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const hydrate = async () => {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const accessToken = params.get("access_token");
+        const userId = params.get("user_id");
+        const userName = params.get("user_name");
+        const userEmail = params.get("user_email");
+
+        if (accessToken && userId && userName && userEmail) {
+          persist({
+            token: accessToken,
+            user: { id: userId, nome: userName, email: userEmail },
+          });
+          window.history.replaceState({}, document.title, window.location.pathname);
+          setLoading(false);
+          return;
+        }
+      }
+
       const session = getStoredSession();
       if (!session) {
         setLoading(false);

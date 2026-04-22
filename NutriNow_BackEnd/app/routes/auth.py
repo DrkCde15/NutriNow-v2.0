@@ -115,10 +115,17 @@ def login():
 @auth_bp.route("/auth/login", methods=["GET"])
 def google_login():
     hosts = get_google_oauth_hosts()
+    
+    # Determinar a origem (frontend local ou cloudflare)
+    origin = request.headers.get("Origin") or request.referrer or os.getenv('FRONTEND_URL', 'http://localhost:5173')
+    if origin.endswith("/login"):
+        origin = origin.replace("/login", "")
+    
     authorization_url = client.prepare_request_uri(
         uri=hosts.authorization_endpoint,
         redirect_uri="http://localhost:8000/auth/callback",
-        scope=["openid", "email", "profile"]
+        scope=["openid", "email", "profile"],
+        state=origin.rstrip('/')
     )
     return jsonify({"auth_url": authorization_url}), 200
 
@@ -179,21 +186,21 @@ def google_callback():
                     user_id = user["id"]
                     user_nome = user["nome"]
 
-                # Determinar URL de redirecionamento dinâmica
-                frontend_prod = "https://drkcde15.github.io/NutriNow"
-                frontend_local = "http://localhost:5173/NutriNow"
-                
-                # Se a requisição veio de um ambiente local (checando referer ou host)
-                referer = request.referrer or ""
-                target_url = frontend_local if "localhost" in referer or "127.0.0.1" in referer else frontend_prod
+                # Usar a URL do frontend recebida no state, ou cair para variável de ambiente
+                state = request.args.get("state")
+                target_url = state if state else os.getenv('FRONTEND_URL', 'http://localhost:5173').rstrip('/')
                 
                 access_token = create_access_token(identity=str(user_id))
                 return redirect(f"{target_url}/?access_token={access_token}&user_id={user_id}&user_name={user_nome}&user_email={user_email}")
         
-        return redirect(f"https://drkcde15.github.io/NutriNow/login?error=email_not_verified")
+        state = request.args.get("state")
+        target_url = state if state else os.getenv('FRONTEND_URL', 'http://localhost:5173').rstrip('/')
+        return redirect(f"{target_url}/login?error=email_not_verified")
     except Exception as e:
         logger.error(f"Erro no callback do google: {e}")
-        return redirect(f"https://drkcde15.github.io/NutriNow/login?error=server_error")
+        state = request.args.get("state")
+        target_url = state if state else os.getenv('FRONTEND_URL', 'http://localhost:5173').rstrip('/')
+        return redirect(f"{target_url}/login?error=server_error")
 
 @auth_bp.route("/logout", methods=["POST"])
 @jwt_required()
