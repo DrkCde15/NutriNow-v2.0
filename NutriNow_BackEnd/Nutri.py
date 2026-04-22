@@ -5,6 +5,7 @@ import logging
 import mysql.connector
 from datetime import datetime
 from typing import List, Optional, Dict
+import random
 from google import genai
 from google.genai import types, errors
 import time
@@ -55,8 +56,13 @@ class NutritionistAgent:
         if not api_key:
              logger.warning("GEMINI_API_KEY não encontrada no .env")
              
-        self.client = genai.Client(api_key=api_key)
+        self.api_key = api_key
+        self.api_version = os.getenv("GEMINI_API_VERSION", "v1")
+        self.timeout_seconds = int(os.getenv("GEMINI_TIMEOUT_SECONDS", "120"))
+        self.client = self._build_genai_client()
         self.model_name = "gemini-2.5-flash" 
+        fallback_models_raw = os.getenv("GEMINI_FALLBACK_MODELS", "gemini-1.5-flash")
+        self.fallback_models = [m.strip() for m in fallback_models_raw.split(",") if m.strip()]
 
         self.config = types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT
@@ -64,6 +70,79 @@ class NutritionistAgent:
         
         # Inicializa a ferramenta de visão local (agora também usando GenAI)
         self.food_analyser = FoodAnalyser()
+
+    def _build_genai_client(self):
+        return genai.Client(
+            api_key=self.api_key,
+            http_options=types.HttpOptions(
+                apiVersion=self.api_version,
+                timeout=self.timeout_seconds
+            )
+        )
+
+    @staticmethod
+    def _is_retryable_error(exc: Exception) -> bool:
+        """Define quais erros de rede/API valem retry com backoff."""
+        if isinstance(exc, (errors.ServerError, TimeoutError, ConnectionError)):
+            return True
+
+        msg = str(exc).lower()
+        retryable_markers = (
+            "429",
+            "500",
+            "502",
+            "503",
+            "504",
+            "sslerror",
+            "ssleoferror",
+            "unexpected_eof_while_reading",
+            "eof occurred",
+            "connection aborted",
+            "connection reset",
+            "timed out",
+            "timeout",
+            "temporarily unavailable",
+        )
+        return any(marker in msg for marker in retryable_markers)
+
+    def _generate_with_retry(self, contents: str, config: Optional[types.GenerateContentConfig] = None):
+        max_retries = int(os.getenv("GEMINI_MAX_RETRIES", "5"))
+        config = config or self.config
+        candidate_models = [self.model_name] + [m for m in self.fallback_models if m != self.model_name]
+        last_exc = None
+
+        for model in candidate_models:
+            for attempt in range(max_retries):
+                try:
+                    return self.client.models.generate_content(
+                        model=model,
+                        contents=contents,
+                        config=config
+                    )
+                except Exception as exc:
+                    last_exc = exc
+                    if not self._is_retryable_error(exc):
+                        break
+
+                    if attempt >= max_retries - 1:
+                        break
+
+                    # Em erro SSL/EOF, recria o cliente para renovar handshake/conexoes.
+                    msg = str(exc).lower()
+                    if "ssl" in msg or "eof" in msg:
+                        self.client = self._build_genai_client()
+
+                    # Exponential backoff com jitter para reduzir colisao entre retries concorrentes.
+                    wait_time = min(2 ** attempt, 16) + random.uniform(0, 0.75)
+                    logger.warning(
+                        f"Falha transitoria ao chamar Gemini [{model}] (tentativa {attempt + 1}/{max_retries}): {exc}. "
+                        f"Novo retry em {wait_time:.2f}s."
+                    )
+                    time.sleep(wait_time)
+
+            logger.warning(f"Falha ao usar o modelo {model}. Tentando fallback, se disponivel.")
+
+        raise last_exc if last_exc else RuntimeError("Falha ao gerar conteudo no Gemini.")
 
     def _get_db_connection(self):
         return mysql.connector.connect(**self.db_config)
@@ -133,11 +212,11 @@ class NutritionistAgent:
         return history
 
     def _save_message(self, message_type: str, content: str):
-        """Salva mensagem no histórico do MySQL"""
+        """Salva mensagem no historico do MySQL"""
         try:
             conn = self._get_db_connection()
             cursor = conn.cursor()
-            # Incluído 'email' no INSERT conforme o schema SQL
+            # Incluido 'email' no INSERT conforme o schema SQL
             cursor.execute(
                 "INSERT INTO chat_history (session_id, user_id, email, message_type, content) VALUES (%s, %s, %s, %s, %s)",
                 (self.session_id, self.user_id, self.email, message_type, content)
@@ -145,56 +224,41 @@ class NutritionistAgent:
             conn.commit()
             cursor.close()
             conn.close()
-            logger.info(f"✅ Mensagem salva no DB: {message_type}")
+            logger.info(f"Mensagem salva no DB: {message_type}")
         except Exception as e:
-            logger.error(f"❌ Erro ao salvar mensagem no banco: {e}")
+            logger.error(f"Erro ao salvar mensagem no banco: {e}")
 
     def run_text(self, text: str) -> str:
         """Processa uma mensagem de texto usando IA Local"""
         try:
-            # 1. Recupera Contexto e Histórico
+            # 1. Recupera Contexto e Historico
             user_context = self._get_user_context()
             chat_history = self.get_conversation_history(limit=6)
-            
-            # 2. Monta o Prompt com Memória
+
+            # 2. Monta o Prompt com Memoria
             full_prompt = f"{SYSTEM_PROMPT}{user_context}\n\n"
             for msg in chat_history:
                 full_prompt += f"{msg['role'].capitalize()}: {msg['content']}\n"
-            
+
             full_prompt += f"User: {text}\nAssistant:"
 
-            # 3. Gera Resposta com Gemini (com Retry para 429 e 503)
-            max_retries = 5
-            for attempt in range(max_retries):
-                try:
-                    response = self.client.models.generate_content(
-                        model=self.model_name,
-                        contents=full_prompt,
-                        config=self.config
-                    )
-                    result = response.text
-                    break # Sucesso!
-                except Exception as e:
-                    if ("429" in str(e) or "503" in str(e)) and attempt < max_retries - 1:
-                        wait_time = (2 ** attempt) * 2 # Exponential backoff: 2, 4, 8, 16s
-                        tipo_erro = "Cota atingida (429)" if "429" in str(e) else "Servidor ocupado (503)"
-                        logger.warning(f"{tipo_erro}. Tentando novamente em {wait_time}s...")
-                        time.sleep(wait_time)
-                        continue
-                    raise e
+            # 3. Gera resposta com retry robusto para quota, servidor e SSL/transiente.
+            response = self._generate_with_retry(contents=full_prompt, config=self.config)
+            result = response.text
 
             # 4. Salva no Banco
             self._save_message("human", text)
             self._save_message("ai", result)
-
             return result
         except Exception as e:
             logger.error(f"Erro no NutriAgent: {e}")
             if "429" in str(e):
-                return "⚠️ A NutriAI está muito requisitada agora (limite de cota excedido). Por favor, aguarde uns segundos e tente novamente."
+                return "A NutriAI esta muito requisitada agora (limite de cota excedido). Aguarde alguns segundos e tente novamente."
             if "503" in str(e):
-                return "⚠️ Os servidores da Google estão com alta demanda temporária (503). Por favor, aguarde uns segundos e tente enviar novamente!"
-            return "Puxa, tive um probleminha técnico aqui na minha memória local. Pode repetir?"
+                return "Os servidores da Google estao com alta demanda temporaria (503). Aguarde alguns segundos e tente novamente."
+            if "ssl" in str(e).lower() or "eof" in str(e).lower():
+                return "Houve uma instabilidade de conexao segura com a IA (SSL). Tente novamente em alguns segundos."
+            return "Puxa, tive um probleminha tecnico aqui. Pode repetir?"
 
     def run_image(self, file_path: str) -> str:
         """Processa análise de imagem usando a ferramenta food_analyser"""
