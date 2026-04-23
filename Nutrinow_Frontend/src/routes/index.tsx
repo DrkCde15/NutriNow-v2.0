@@ -9,7 +9,6 @@ import {
   Check,
   Camera,
   HeartPulse,
-  Star,
 } from "lucide-react";
 import heroImg from "@/assets/hero-nutrition.jpg";
 import { SiteHeader } from "@/components/site-header";
@@ -52,7 +51,6 @@ function Landing() {
         <Hero />
         <Features />
         <HowItWorks />
-        <Testimonials />
         <CTA />
       </main>
       <Footer />
@@ -210,45 +208,6 @@ function HowItWorks() {
             </div>
           ))}
         </div>
-      </div>
-    </section>
-  );
-}
-
-function Testimonials() {
-  const t = [
-    { name: "Marina S.", role: "Estudante", text: "Em 3 meses mudei minha relação com comida. O chat me ajuda quando bate vontade de desistir." },
-    { name: "Rafael P.", role: "Engenheiro", text: "Os treinos cabem na minha rotina caótica. E a análise por foto é mágica." },
-    { name: "Carla M.", role: "Mãe e atleta", text: "Finalmente um app que entende minhas restrições. Recomendo demais!" },
-  ];
-  return (
-    <section id="depoimentos" className="mx-auto max-w-6xl px-6 py-24">
-      <div className="mx-auto max-w-2xl text-center">
-        <h2 className="font-display text-3xl font-bold md:text-4xl">Quem usa, ama</h2>
-        <p className="mt-4 text-muted-foreground">Histórias reais de quem transformou a rotina com o NutriNow.</p>
-      </div>
-      <div className="mt-14 grid gap-6 md:grid-cols-3">
-        {t.map((p) => (
-          <figure key={p.name} className="rounded-3xl border border-border bg-card p-8 shadow-sm transition-smooth hover:shadow-elegant">
-            <div className="flex gap-1 text-primary">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Star key={i} className="h-4 w-4 fill-current" />
-              ))}
-            </div>
-            <blockquote className="mt-4 text-base leading-relaxed text-foreground">
-              "{p.text}"
-            </blockquote>
-            <figcaption className="mt-6 flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-hero font-semibold text-primary-foreground">
-                {p.name[0]}
-              </span>
-              <div>
-                <p className="text-sm font-semibold">{p.name}</p>
-                <p className="text-xs text-muted-foreground">{p.role}</p>
-              </div>
-            </figcaption>
-          </figure>
-        ))}
       </div>
     </section>
   );
