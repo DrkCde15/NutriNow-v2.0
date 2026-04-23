@@ -93,7 +93,6 @@ function BmiAvatar({ bmi, color }: { bmi: number; color: string }) {
   const normalized = clamp((bmi - 15) / 25, 0, 1);
   const activeIndex = getBmiCategoryIndex(bmi);
   const resolvedIndex = activeIndex >= 0 ? activeIndex : 1;
-  const cardTilt = `${-5 + normalized * 10}deg`;
 
   return (
     <div className="relative mx-auto flex h-[25rem] w-full max-w-[20rem] items-center justify-center">
@@ -104,17 +103,14 @@ function BmiAvatar({ bmi, color }: { bmi: number; color: string }) {
       />
 
       <div
-        className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[2.25rem] border border-white/60 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.95),_rgba(255,255,255,0.72)_48%,_rgba(255,255,255,0.45)_100%)] shadow-[0_24px_60px_rgba(15,23,42,0.14)] backdrop-blur"
+        className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[2.25rem] bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.95),_rgba(255,255,255,0.72)_48%,_rgba(255,255,255,0.45)_100%)] backdrop-blur"
         style={{
           boxShadow: "none",
-          transform: `rotate(${cardTilt})`,
-          transition: "transform 360ms ease, box-shadow 360ms ease",
+          transform: "none",
         }}
         role="img"
         aria-label="Silhueta corporal reagindo ao IMC"
       >
-        <div className="absolute inset-4 rounded-[1.75rem] border border-white/70" aria-hidden />
-
         <div className="relative flex h-full w-full items-center justify-center px-8 py-7">
           {BMI_SHAPES.map((src, index) => {
             const isActive = index === resolvedIndex;
