@@ -1,6 +1,11 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Activity, Ruler, Scale } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
+import bmiShape1 from "@/assets/bmi-shape-1.png";
+import bmiShape2 from "@/assets/bmi-shape-2.png";
+import bmiShape3 from "@/assets/bmi-shape-3.png";
+import bmiShape4 from "@/assets/bmi-shape-4.png";
+import bmiShape5 from "@/assets/bmi-shape-5.png";
 
 type BmiCategory = {
   label: string;
@@ -62,6 +67,8 @@ const BMI_CATEGORIES: Array<{ min: number; max: number; config: BmiCategory }> =
   },
 ];
 
+const BMI_SHAPES = [bmiShape1, bmiShape2, bmiShape3, bmiShape4, bmiShape5];
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
@@ -78,117 +85,63 @@ function formatWeight(weight: number) {
   return `${weight.toFixed(0)} kg`;
 }
 
+function getBmiCategoryIndex(bmi: number) {
+  return BMI_CATEGORIES.findIndex(({ min, max }) => bmi >= min && bmi <= max);
+}
+
 function BmiAvatar({ bmi, color }: { bmi: number; color: string }) {
   const normalized = clamp((bmi - 15) / 25, 0, 1);
-  const shoulderScale = 0.84 + normalized * 0.46;
-  const torsoScale = 0.78 + normalized * 0.7;
-  const hipScale = 0.84 + normalized * 0.6;
-  const legScale = 0.82 + normalized * 0.3;
-  const armDistance = 17 + normalized * 7;
+  const activeIndex = getBmiCategoryIndex(bmi);
+  const resolvedIndex = activeIndex >= 0 ? activeIndex : 1;
+  const cardTilt = `${-5 + normalized * 10}deg`;
 
   return (
-    <div className="relative mx-auto flex h-[25rem] w-full max-w-[18rem] items-center justify-center">
+    <div className="relative mx-auto flex h-[25rem] w-full max-w-[20rem] items-center justify-center">
       <div
-        className="absolute inset-x-8 bottom-5 h-14 rounded-full blur-2xl transition-all duration-500"
+        className="absolute inset-x-10 bottom-3 h-16 rounded-full blur-3xl transition-all duration-500"
         style={{ backgroundColor: `${color}33` }}
         aria-hidden
       />
 
-      <svg
-        viewBox="0 0 220 360"
-        className="h-full w-full drop-shadow-[0_18px_40px_rgba(15,23,42,0.16)]"
+      <div
+        className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[2.25rem] border border-white/60 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.95),_rgba(255,255,255,0.72)_48%,_rgba(255,255,255,0.45)_100%)] shadow-[0_24px_60px_rgba(15,23,42,0.14)] backdrop-blur"
+        style={{
+          boxShadow: "none",
+          transform: `rotate(${cardTilt})`,
+          transition: "transform 360ms ease, box-shadow 360ms ease",
+        }}
         role="img"
-        aria-label="Avatar corporal reagindo ao IMC"
+        aria-label="Silhueta corporal reagindo ao IMC"
       >
-        <defs>
-          <linearGradient id="avatarFill" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor={color} stopOpacity="0.88" />
-            <stop offset="100%" stopColor={color} />
-          </linearGradient>
-        </defs>
+        <div className="absolute inset-4 rounded-[1.75rem] border border-white/70" aria-hidden />
 
-        <g
-          style={{
-            transition: "transform 360ms ease, fill 360ms ease",
-            transformOrigin: "110px 90px",
-          }}
-        >
-          <circle cx="110" cy="52" r="28" fill="url(#avatarFill)" />
+        <div className="relative flex h-full w-full items-center justify-center px-8 py-7">
+          {BMI_SHAPES.map((src, index) => {
+            const isActive = index === resolvedIndex;
+            const distance = Math.abs(index - resolvedIndex);
 
-          <g
-            style={{
-              transition: "transform 360ms ease",
-              transformOrigin: "110px 118px",
-              transformBox: "fill-box",
-              transform: `scaleX(${shoulderScale})`,
-            }}
-          >
-            <rect x="76" y="78" width="68" height="88" rx="34" fill="url(#avatarFill)" />
-          </g>
-
-          <g
-            style={{
-              transition: "transform 360ms ease",
-              transformOrigin: "110px 188px",
-              transformBox: "fill-box",
-              transform: `scaleX(${torsoScale})`,
-            }}
-          >
-            <path
-              d="M82 140 C72 160 70 190 72 214 C74 238 84 264 110 264 C136 264 146 238 148 214 C150 190 148 160 138 140 Z"
-              fill="url(#avatarFill)"
-            />
-          </g>
-
-          <g
-            style={{
-              transition: "transform 360ms ease",
-              transformOrigin: "110px 228px",
-              transformBox: "fill-box",
-              transform: `scaleX(${hipScale})`,
-            }}
-          >
-            <path
-              d="M76 214 C80 192 140 192 144 214 L154 264 C158 280 144 294 128 294 H92 C76 294 62 280 66 264 Z"
-              fill="url(#avatarFill)"
-            />
-          </g>
-
-          <g
-            style={{
-              transition: "transform 360ms ease",
-              transformOrigin: "110px 188px",
-            }}
-          >
-            <path
-              d={`M${110 - armDistance} 116 C${92 - armDistance / 4} 146 ${94 - armDistance / 3} 174 ${88 - armDistance / 2} 210 C86 224 88 240 94 254 C98 244 100 230 104 214 C108 194 110 166 ${110 - armDistance + 6} 116 Z`}
-              fill="url(#avatarFill)"
-            />
-            <path
-              d={`M${110 + armDistance} 116 C${128 + armDistance / 4} 146 ${126 + armDistance / 3} 174 ${132 + armDistance / 2} 210 C134 224 132 240 126 254 C122 244 120 230 116 214 C112 194 110 166 ${110 + armDistance - 6} 116 Z`}
-              fill="url(#avatarFill)"
-            />
-          </g>
-
-          <g
-            style={{
-              transition: "transform 360ms ease",
-              transformOrigin: "110px 312px",
-              transformBox: "fill-box",
-              transform: `scaleX(${legScale})`,
-            }}
-          >
-            <path
-              d="M92 284 C88 308 82 330 80 346 C80 352 84 356 90 356 H98 C104 356 108 352 108 346 C108 330 106 308 104 284 Z"
-              fill="url(#avatarFill)"
-            />
-            <path
-              d="M128 284 C132 308 138 330 140 346 C140 352 136 356 130 356 H122 C116 356 112 352 112 346 C112 330 114 308 116 284 Z"
-              fill="url(#avatarFill)"
-            />
-          </g>
-        </g>
-      </svg>
+            return (
+              <img
+                key={src}
+                src={src}
+                alt=""
+                aria-hidden
+                className="absolute h-[18.5rem] w-auto select-none object-contain mix-blend-multiply"
+                style={{
+                  opacity: isActive ? 1 : 0,
+                  transform: `translateY(${isActive ? "0px" : `${distance * 10}px`}) scale(${isActive ? 1.04 : 0.94})`,
+                  filter: isActive
+                    ? "brightness(1.01) contrast(1.02)"
+                    : "brightness(1) contrast(1)",
+                  backgroundColor: "#ffffff",
+                  transition:
+                    "opacity 360ms ease, transform 360ms ease, filter 360ms ease",
+                }}
+              />
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
