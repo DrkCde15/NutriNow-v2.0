@@ -16,6 +16,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as EsqueciSenhaRouteImport } from './routes/esqueci-senha'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ChatRouteImport } from './routes/chat'
+import { Route as CalendarioRouteImport } from './routes/calendario'
 import { Route as CadastroRouteImport } from './routes/cadastro'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -54,6 +55,11 @@ const ChatRoute = ChatRouteImport.update({
   path: '/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CalendarioRoute = CalendarioRouteImport.update({
+  id: '/calendario',
+  path: '/calendario',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CadastroRoute = CadastroRouteImport.update({
   id: '/cadastro',
   path: '/cadastro',
@@ -68,6 +74,7 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cadastro': typeof CadastroRoute
+  '/calendario': typeof CalendarioRoute
   '/chat': typeof ChatRoute
   '/dashboard': typeof DashboardRoute
   '/esqueci-senha': typeof EsqueciSenhaRoute
@@ -79,6 +86,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/cadastro': typeof CadastroRoute
+  '/calendario': typeof CalendarioRoute
   '/chat': typeof ChatRoute
   '/dashboard': typeof DashboardRoute
   '/esqueci-senha': typeof EsqueciSenhaRoute
@@ -91,6 +99,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/cadastro': typeof CadastroRoute
+  '/calendario': typeof CalendarioRoute
   '/chat': typeof ChatRoute
   '/dashboard': typeof DashboardRoute
   '/esqueci-senha': typeof EsqueciSenhaRoute
@@ -104,6 +113,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/cadastro'
+    | '/calendario'
     | '/chat'
     | '/dashboard'
     | '/esqueci-senha'
@@ -115,6 +125,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/cadastro'
+    | '/calendario'
     | '/chat'
     | '/dashboard'
     | '/esqueci-senha'
@@ -126,6 +137,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/cadastro'
+    | '/calendario'
     | '/chat'
     | '/dashboard'
     | '/esqueci-senha'
@@ -138,6 +150,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CadastroRoute: typeof CadastroRoute
+  CalendarioRoute: typeof CalendarioRoute
   ChatRoute: typeof ChatRoute
   DashboardRoute: typeof DashboardRoute
   EsqueciSenhaRoute: typeof EsqueciSenhaRoute
@@ -198,6 +211,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/calendario': {
+      id: '/calendario'
+      path: '/calendario'
+      fullPath: '/calendario'
+      preLoaderRoute: typeof CalendarioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/cadastro': {
       id: '/cadastro'
       path: '/cadastro'
@@ -218,6 +238,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CadastroRoute: CadastroRoute,
+  CalendarioRoute: CalendarioRoute,
   ChatRoute: ChatRoute,
   DashboardRoute: DashboardRoute,
   EsqueciSenhaRoute: EsqueciSenhaRoute,

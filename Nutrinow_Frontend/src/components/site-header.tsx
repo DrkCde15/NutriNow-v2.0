@@ -7,6 +7,7 @@ import logo from "@/assets/logo.png";
 const privateLinks = [
   { to: "/dashboard" as const, label: "Dashboard" },
   { to: "/planos" as const, label: "Dietas e Treinos" },
+  { to: "/calendario" as const, label: "Calendario" },
   { to: "/chat" as const, label: "Chat NutriAI" },
 ];
 
