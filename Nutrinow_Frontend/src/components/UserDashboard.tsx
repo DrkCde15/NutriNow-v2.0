@@ -18,6 +18,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { BmiAvatarCalculator } from "@/components/bmi-avatar-calculator";
 import type {
   ConversationInsight,
   UserProfile,
@@ -263,6 +264,12 @@ export default function UserDashboard({
             </ul>
           </aside>
         </div>
+
+        <BmiAvatarCalculator
+          initialWeight={profile.weight > 0 ? profile.weight : 68}
+          initialHeight={profile.height > 0 ? profile.height : 1.72}
+          className="mt-6"
+        />
       </main>
     </section>
   );

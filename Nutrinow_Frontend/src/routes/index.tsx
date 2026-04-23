@@ -11,6 +11,7 @@ import {
   HeartPulse,
 } from "lucide-react";
 import heroImg from "@/assets/hero-nutrition.jpg";
+import { BmiAvatarCalculator } from "@/components/bmi-avatar-calculator";
 import { SiteHeader } from "@/components/site-header";
 
 export const Route = createFileRoute("/")({
@@ -49,6 +50,7 @@ function Landing() {
       <SiteHeader />
       <main>
         <Hero />
+        <BmiAvatarCalculator />
         <Features />
         <HowItWorks />
         <CTA />
