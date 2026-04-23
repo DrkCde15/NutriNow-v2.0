@@ -2,22 +2,21 @@ import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AlertCircle } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
-import UserDashboard, {
-  fallbackInsights,
+import UserDashboard from "@/components/UserDashboard";
+import {
   fallbackProfile,
-  fallbackWeightHistory,
   type ConversationInsight,
   type UserProfile,
   type WeightHistoryPoint,
-} from "@/components/UserDashboard";
+} from "@/components/dashboard-models";
 import { apiRequest } from "@/lib/api";
-import { CHAT_SESSION_STORAGE_KEY, useAuth } from "@/lib/auth";
+import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/dashboard")({
   component: DashboardPage,
   head: () => ({
     meta: [
-      { title: "Dashboard — NutriNow" },
+      { title: "Dashboard - NutriNow" },
       {
         name: "description",
         content: "Visualize peso, IMC, meta e insights da sua rotina no NutriNow.",
@@ -54,15 +53,9 @@ function DashboardPage() {
       setError("");
 
       try {
-        const sessionId =
-          typeof window !== "undefined"
-            ? localStorage.getItem(CHAT_SESSION_STORAGE_KEY) ?? undefined
-            : undefined;
-
         const data = await apiRequest<DashboardResponse>("/dashboard", {
           method: "GET",
           token,
-          sessionId,
         });
 
         setDashboard(data);
@@ -96,7 +89,7 @@ function DashboardPage() {
               <p className="font-medium">{error}</p>
             </div>
             <p className="mt-3 text-sm text-muted-foreground">
-              Exibindo um dashboard demonstrativo enquanto a conexao com o backend nao responde como esperado.
+              Nao foi possivel carregar os dados reais do banco neste momento.
             </p>
           </div>
 
@@ -106,16 +99,18 @@ function DashboardPage() {
                 ...fallbackProfile,
                 name: user?.nome ?? fallbackProfile.name,
               }}
-              initialInsights={fallbackInsights}
-              initialWeightHistory={fallbackWeightHistory}
+              initialInsights={[]}
+              initialWeightHistory={[]}
             />
           </div>
         </main>
       ) : (
         <UserDashboard
-          initialProfile={dashboard?.profile ?? { ...fallbackProfile, name: user?.nome ?? fallbackProfile.name }}
-          initialInsights={dashboard?.conversationInsights?.length ? dashboard.conversationInsights : fallbackInsights}
-          initialWeightHistory={dashboard?.weightHistory?.length ? dashboard.weightHistory : fallbackWeightHistory}
+          initialProfile={
+            dashboard?.profile ?? { ...fallbackProfile, name: user?.nome ?? fallbackProfile.name }
+          }
+          initialInsights={dashboard?.conversationInsights ?? []}
+          initialWeightHistory={dashboard?.weightHistory ?? []}
         />
       )}
     </div>

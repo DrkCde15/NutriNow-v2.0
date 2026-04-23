@@ -5,80 +5,175 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.database import get_db
-from app.services.agent_service import get_agent
 
 logger = logging.getLogger(__name__)
 profile_bp = Blueprint("profile", __name__)
 
 
-def _extract_conversation_insights(history):
+def _truncate_text(text, limit=140):
+    clean = " ".join((text or "").strip().split())
+    if len(clean) <= limit:
+        return clean
+    return f"{clean[: limit - 3].rstrip()}..."
+
+
+def _to_datetime(value):
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(value, fmt)
+            except ValueError:
+                continue
+    return datetime.now()
+
+
+def _infer_insight_status(text, source_type=None):
+    lowered = (text or "").lower()
+
+    if source_type == "treino":
+        return "positive"
+    if source_type == "dieta":
+        return "neutral"
+
+    positive_terms = [
+        "treino",
+        "treinei",
+        "academia",
+        "proteina",
+        "proteinas",
+        "dormi bem",
+        "hidrata",
+        "foco",
+    ]
+    alert_terms = [
+        "nao consegui",
+        "n\u00e3o consegui",
+        "desanimei",
+        "cansado",
+        "fome",
+        "dor",
+        "ansiedade",
+    ]
+
+    if any(term in lowered for term in alert_terms):
+        return "alert"
+    if any(term in lowered for term in positive_terms):
+        return "positive"
+    return "neutral"
+
+
+def _resolve_dieta_user_column(cursor):
+    try:
+        cursor.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'dieta_treino'
+              AND column_name IN ('user_id', 'usuario_id')
+            """
+        )
+        columns = {row["column_name"] for row in cursor.fetchall()}
+        if "user_id" in columns:
+            return "user_id"
+        if "usuario_id" in columns:
+            return "usuario_id"
+    except Exception as exc:
+        logger.warning(f"Nao foi possivel detectar coluna de usuario em dieta_treino: {exc}")
+    return "user_id"
+
+
+def _extract_conversation_insights(chat_rows, routine_rows, limit=4):
     insights = []
     seen = set()
+    events = []
 
-    for item in history:
-        content = (item.get("content") or "").strip()
+    for row in chat_rows:
+        if row.get("message_type") != "human":
+            continue
+
+        content = _truncate_text(row.get("content"), 160)
         if not content:
             continue
 
-        lowered = content.lower()
-        status = "neutral"
-        activity = None
-
-        if any(term in lowered for term in ["treinei", "treino", "malhei", "academia", "hipertrof"]):
-            activity = "Treinou hoje e manteve foco na rotina de exercicios."
-            status = "positive"
-        elif any(
-            term in lowered
-            for term in ["proteina", "proteínas", "whey", "frango", "ovo", "iogurte grego"]
-        ):
-            activity = "Aumentou a ingestao de proteinas para apoiar o objetivo fisico."
-            status = "positive"
-        elif any(term in lowered for term in ["cansado", "desanimei", "nao consegui", "não consegui"]):
-            activity = "Relatou dificuldade para manter consistencia e pode precisar de ajuste."
-            status = "alert"
-        elif any(term in lowered for term in ["agua", "hidrata", "sono", "descanso"]):
-            activity = "Mencionou habitos de recuperacao e autocuidado na rotina."
-            status = "neutral"
-
-        if not activity:
-            continue
-
-        key = (activity, status)
-        if key in seen:
-            continue
-        seen.add(key)
-
-        insights.append(
+        timestamp = _to_datetime(row.get("timestamp"))
+        events.append(
             {
-                "date": item.get("timestamp", "")[:10] or datetime.now().strftime("%Y-%m-%d"),
-                "activity": activity,
-                "status": status,
+                "sort_time": timestamp,
+                "date": timestamp.strftime("%Y-%m-%d"),
+                "activity": content,
+                "status": _infer_insight_status(content),
             }
         )
 
-        if len(insights) == 4:
+    for row in routine_rows:
+        tipo = (row.get("tipo") or "").lower()
+        title = _truncate_text(row.get("title"), 100)
+        description = _truncate_text(row.get("description"), 120)
+        timestamp = _to_datetime(row.get("updated_at") or row.get("created_at"))
+
+        if tipo == "treino":
+            activity = f"Treino registrado: {title or 'sem titulo'}"
+        else:
+            activity = f"Dieta registrada: {title or 'sem titulo'}"
+
+        if description:
+            activity = f"{activity}. {description}"
+
+        events.append(
+            {
+                "sort_time": timestamp,
+                "date": timestamp.strftime("%Y-%m-%d"),
+                "activity": _truncate_text(activity, 170),
+                "status": _infer_insight_status(activity, source_type=tipo),
+            }
+        )
+
+    events.sort(key=lambda item: item["sort_time"], reverse=True)
+
+    for event in events:
+        key = (event["date"], event["activity"])
+        if key in seen:
+            continue
+        seen.add(key)
+        insights.append(
+            {
+                "date": event["date"],
+                "activity": event["activity"],
+                "status": event["status"],
+            }
+        )
+        if len(insights) >= limit:
             break
 
     return insights
 
 
-def _build_weight_history(current_weight, goal, plan_count):
-    base_weight = float(current_weight) if current_weight else 75.0
+def _build_weight_history(current_weight, routine_rows):
     today = datetime.now().date()
-    goal_text = (goal or "").lower()
-    gaining_mass = "massa" in goal_text or "hipertrof" in goal_text
+    counts_by_day = {}
 
+    for row in routine_rows:
+        created_at = row.get("created_at")
+        if not created_at:
+            continue
+        created_day = _to_datetime(created_at).date()
+        if created_day < today - timedelta(days=6):
+            continue
+        counts_by_day[created_day] = counts_by_day.get(created_day, 0) + 1
+
+    current_weight_value = float(current_weight) if current_weight else None
     history = []
     for offset in range(6, -1, -1):
         day = today - timedelta(days=offset)
-        variation = (6 - offset) * 0.18 if gaining_mass else -(6 - offset) * 0.12
-        activity_level = min(95, 58 + plan_count * 4 + ((6 - offset) % 4) * 5)
-
+        entry_count = counts_by_day.get(day, 0)
         history.append(
             {
                 "date": day.strftime("%d/%m"),
-                "weight": round(base_weight - (0.9 if gaining_mass else -0.6) + variation, 1),
-                "activityLevel": activity_level,
+                "weight": current_weight_value if day == today else None,
+                "activityLevel": min(100, entry_count * 25),
             }
         )
 
@@ -240,10 +335,11 @@ def delete_perfil():
 @jwt_required()
 def get_dashboard():
     user_id = get_jwt_identity()
-    session_id = request.args.get("session_id") or request.headers.get("X-Session-ID")
 
     try:
         with get_db() as (cursor, conn):
+            dieta_user_column = _resolve_dieta_user_column(cursor)
+
             cursor.execute(
                 """
                 SELECT
@@ -264,10 +360,10 @@ def get_dashboard():
                 return jsonify({"error": "Usuario nao encontrado"}), 404
 
             cursor.execute(
-                """
+                f"""
                 SELECT COUNT(*) AS total
                 FROM dieta_treino
-                WHERE user_id = %s
+                WHERE {dieta_user_column} = %s
                   AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
                 """,
                 (user_id,),
@@ -275,34 +371,40 @@ def get_dashboard():
             recent_plan_count = (cursor.fetchone() or {}).get("total", 0) or 0
 
             cursor.execute(
-                """
+                f"""
                 SELECT COUNT(*) AS total
                 FROM dieta_treino
-                WHERE user_id = %s AND tipo = 'treino'
+                WHERE {dieta_user_column} = %s AND tipo = 'treino'
                 """,
                 (user_id,),
             )
             treino_count = (cursor.fetchone() or {}).get("total", 0) or 0
 
-        history = []
-        if session_id:
-            agent = get_agent(session_id=session_id, user_id=user_id)
-            history = agent.get_conversation_history(by_user=True) or []
+            cursor.execute(
+                """
+                SELECT message_type, content, timestamp
+                FROM chat_history
+                WHERE user_id = %s
+                ORDER BY timestamp DESC
+                LIMIT 40
+                """,
+                (user_id,),
+            )
+            chat_rows = cursor.fetchall() or []
 
-        insights = _extract_conversation_insights(history)
-        if not insights:
-            insights = [
-                {
-                    "date": datetime.now().strftime("%Y-%m-%d"),
-                    "activity": "Treinou hoje e manteve foco em ganhar massa muscular.",
-                    "status": "positive",
-                },
-                {
-                    "date": datetime.now().strftime("%Y-%m-%d"),
-                    "activity": "Aumentou a ingestao de proteinas ao longo do dia.",
-                    "status": "positive",
-                },
-            ]
+            cursor.execute(
+                f"""
+                SELECT tipo, title, description, created_at, updated_at
+                FROM dieta_treino
+                WHERE {dieta_user_column} = %s
+                ORDER BY COALESCE(updated_at, created_at) DESC
+                LIMIT 40
+                """,
+                (user_id,),
+            )
+            routine_rows = cursor.fetchall() or []
+
+        insights = _extract_conversation_insights(chat_rows, routine_rows)
 
         profile = {
             "name": " ".join(part for part in [user["nome"], user["sobrenome"]] if part).strip() or user["nome"],
@@ -317,11 +419,7 @@ def get_dashboard():
                     "success": True,
                     "profile": profile,
                     "conversationInsights": insights,
-                    "weightHistory": _build_weight_history(
-                        profile["weight"],
-                        profile["goal"],
-                        recent_plan_count or treino_count,
-                    ),
+                    "weightHistory": _build_weight_history(profile["weight"], routine_rows),
                     "stats": {
                         "recentPlans": recent_plan_count,
                         "totalTreinos": treino_count,
