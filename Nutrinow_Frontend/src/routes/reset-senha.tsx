@@ -8,7 +8,7 @@ export const Route = createFileRoute("/reset-senha")({
   component: ResetSenhaPage,
   head: () => ({
     meta: [
-      { title: "Redefinir senha â€” NutriNow" },
+      { title: "Redefinir senha - NutriNow" },
       { name: "description", content: "Defina uma nova senha para sua conta NutriNow." },
     ],
   }),
