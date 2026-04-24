@@ -1,91 +1,141 @@
-# 🥗 NutriNow 2.0 — O Futuro da Nutrição com I.A
+# 🥗 NutriNow
 
-![NutriNow Logo](NutriNow_FrontEnd_React/src/assets/logo.png)
+Plataforma digital de nutricao e performance que transforma orientacao tecnica em acoes simples no dia a dia.
 
-## 🎯 Nossa Proposta: Saúde Inteligente e Privada
+![Logo do projeto](Nutrinow_Frontend/src/assets/logo.png)
 
-O **NutriNow 2.0** não é apenas mais um rastreador de calorias ou gerenciador de dietas. Nossa proposta é ser um **Consultor de Saúde Onipresente**, eliminando a barreira entre o usuário e o conhecimento nutricional de alta qualidade, sem comprometer seus dados pessoais.
+## ✨ O produto
 
-Muitas plataformas de saúde hoje dependem de serviços na nuvem onde seus dados alimentares, médicos e rotinas são vendidos ou processados por grandes modelos de linguagem externos. O NutriNow rompe com isso através da **I.A de Ponta**, utilizando o estado da arte em processamento de linguagem e visão computacional via **Google GenAI**.
+O NutriNow 2 foi desenhado para quem quer melhorar saude, composicao corporal e consistencia sem depender de planilhas confusas.
+
+A experiencia une:
+
+- 🎯 acompanhamento de perfil e objetivo;
+- 📅 organizacao de dieta e treino no mesmo lugar;
+- 🤖 assistente NutriAI para tirar duvidas e manter motivacao.
+
+## 🧩 Problema que resolvemos
+
+Muita gente comeca uma rotina de saude, mas para no meio por 3 motivos:
+
+- 😕 falta de clareza sobre o que fazer;
+- 🔁 dificuldade para manter constancia;
+- 📚 excesso de informacao contraditoria.
+
+O NutriNow reduz essa friccao com orientacao continua, historico e contexto pessoal.
+
+## 👥 Para quem e
+
+- 🏋️ pessoas que querem emagrecer, ganhar massa ou melhorar habitos;
+- 🌱 iniciantes que precisam de direcionamento pratico;
+- 📲 usuarios que querem centralizar treino, dieta e suporte em uma unica interface.
+
+## 🚀 Principais beneficios
+
+- 🧭 Direcao clara: objetivo, progresso e rotina visiveis em um so fluxo.
+- 💬 Apoio continuo: NutriAI disponivel para duvidas e reforco de habitos.
+- ⚡ Menos atrito: cadastro, login e uso rapido, sem curva de aprendizado longa.
+- 📈 Evolucao mensuravel: historico de interacoes e registros para acompanhar consistencia.
+
+## 🛠️ Funcionalidades atuais
+
+- 🔐 Cadastro e login (incluindo Google OAuth).
+- 📧 Recuperacao de senha por e-mail.
+- 👤 Perfil com meta, peso, altura e historico.
+- 🥗 CRUD de dieta e treino.
+- 🤖 Chat com NutriAI (texto) com memoria no MySQL.
+- 📸 Endpoint de analise de imagem disponivel (agente atual em modo texto).
+
+## 🗺️ Jornada do usuario (resumo)
+
+1. 📝 Cria conta e define objetivo.
+2. ⚙️ Ajusta perfil inicial (dados fisicos e meta).
+3. 📆 Registra dieta e treino da semana.
+4. 💡 Usa o chat para suporte e ajustes.
+5. 📊 Volta ao dashboard para acompanhar constancia.
+
+## 🌟 Diferenciais do NutriNow
+
+- 🎯 Produto orientado a resultado, nao so a registro.
+- 🧠 IA contextual (considera usuario, sessao e historico).
+- 🏗️ Arquitetura pronta para evoluir de MVP para ambiente produtivo.
+
+## 🧱 Stack (para contexto)
+
+- Frontend: React + TypeScript + Vite.
+- Backend: Flask + JWT.
+- Banco: MySQL.
+- IA: Groq (chat).
 
 ---
 
-## 🍎 Saúde e Nutrição na Era Digital
+## 👨‍💻 Guia rapido para desenvolvedores
 
-A nutrição é o pilar fundamental da longevidade e da performance humana. No entanto, o acesso a orientações personalizadas muitas vezes é caro ou inacessível. O **NutriNow** surge para democratizar esse acesso, utilizando a tecnologia para transformar dados complexos em escolhas simples e saudáveis.
+### ✅ Requisitos
 
-### O Papel da I.A na Nutrição Moderna
+- Node.js 20+
+- npm 10+
+- Python 3.10+
+- MySQL 8+
 
-A Inteligência Artificial atua como um catalisador para a mudança de hábitos. Diferente de tabelas estáticas, a I.A do NutriNow:
+### 🗂️ Estrutura
 
-- **Personaliza em Escala**: Adapta recomendações em tempo real com base no seu metabolismo e objetivos únicos.
-- **Simplifica o Complexo**: Transforma uma simples foto de um prato em uma análise técnica completa de macronutrientes.
-- **Educação Continuada**: Não apenas diz o que comer, mas explica o _porquê_, ajudando na construção de uma consciência alimentar duradoura.
-- **Suporte 24/7**: Erros e dúvidas não têm hora para acontecer. Ter uma assistência inteligente sempre disponível reduz drasticamente as chances de desistência de uma dieta ou plano de treino.
+```text
+NutriNow-2/
+|- Nutrinow_Frontend/
+|- NutriNow_BackEnd/
+`- README.md
+```
 
----
+### ⚙️ Backend
 
-## 🤖 A Inteligência Artificial
+```bash
+cd NutriNow_BackEnd
+pip install -r requirements.txt
+python App.py
+```
 
-A IA do NutriNow utiliza a biblioteca **Google GenAI**, integrando o modelo **Gemini 2.5 Flash** para oferecer uma experiência de alta performance, rapidez e inteligência superior.
+Backend padrao: `http://127.0.0.1:8000`  
+Healthcheck: `GET /health`
 
-### Por que Gemini 2.5 Flash?
-
-1.  **Velocidade e Estabilidade**: O Gemini 2.5 Flash é otimizado para respostas rápidas e possui limites de cota muito mais generosos e estáveis, garantindo um acompanhamento sem falhas.
-2.  **Visão Computacional Avançada**: Diferente de modelos locais limitados, o Gemini possui uma capacidade multimodal nativa que analisa fotos de alimentos com precisão de detalhes impressionante.
-3.  **Análise de Visão em Dois Estágios**:
-    -   **Identificação**: Nossa aplicação utiliza a visão multimodal do Gemini para extrair fatos visuais complexos (ingredientes, porções e métodos de preparo).
-    -   **Interpretação**: A NutriAI processa esses dados para gerar um relatório nutricional estruturado com macronutrientes e dicas personalizadas.
-
----
-
-## ✨ Funcionalidades Principais
-
-### 💬 Chatbot NutriAI
-
-Sua nutricionista particular disponível 24/7.
-
-- **Contexto de Perfil**: Ela sabe sua meta (Ex: Emagrecer) e ajusta o tom da conversa para te manter motivado.
-- **Memória Persistente**: Graças à integração com o banco de dados, ela lembra do seu progresso em sessões diferentes.
-
-### 📸 Diagnóstico de Refeição
-
-Basta tirar uma foto do seu prato para receber:
-
-- Estimativa de Calorias, Proteínas, Carboidratos e Gorduras.
-- Avaliação de equilíbrio nutricional para atletas.
-- "Dica de Ouro" para otimizar sua próxima refeição.
-
----
-
-## 🛠️ Stack Tecnológica
-
-- **Frontend**: React 18, Vite, TypeScript, Lucide-Icons, CSS Premium (Glassmorphism).
-- **Backend**: Flask (Python), MySQL, Google GenAI SDK.
-- **Motor de IA**: Google Gemini 2.5 Flash (Multimodal & Velocidade).
-
----
-
-## 🚀 Como Rodar o Projeto
-
-### 1. Obter Chave de API
-Obtenha uma chave de API gratuita ou premium no [Google AI Studio](https://aistudio.google.com/).
-
-### 2. Banco de Dados
-Importe o `NutriNow_BackEnd/nutrinow2.sql` no seu servidor MySQL.
-
-### 3. Configuração (.env)
-Na pasta `NutriNow_BackEnd/`, configure seu `.env`:
+`.env` esperado em `NutriNow_BackEnd/`:
 
 ```env
 MYSQL_HOST=localhost
+MYSQL_PORT=3306
 MYSQL_USER=root
 MYSQL_PASSWORD=sua_senha
 MYSQL_DATABASE=nutrinow2
-FLASK_SECRET_KEY=nutrinow_sec_key
-GEMINI_API_KEY=sua_chave_api_do_google
+HOST=127.0.0.1
+PORT=8000
+FLASK_DEBUG=true
+FLASK_SECRET_KEY=troque_esta_chave
+JWT_SECRET_KEY=troque_esta_chave
+FRONTEND_URL=http://localhost:5173
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+GROQ_API_KEY=sua_chave_groq
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+GROQ_PRIMARY_MODEL=groq/compound-mini
+GROQ_FALLBACK_MODELS=groq/compound
+GROQ_TIMEOUT_SECONDS=60
+GROQ_MAX_RETRIES=5
+GROQ_TEMPERATURE=0.7
+CLIENT_ID=seu_google_client_id
+SECRET_KEY_CLIENT=seu_google_client_secret
+EMAIL_SENDER=seu_email@gmail.com
+EMAIL_PASSWORD=sua_senha_de_app
 ```
 
----
+### 🎨 Frontend
 
-**NutriNow** — _Transformando tecnologia em saúde, uma refeição por vez._ 🥗💪
+```bash
+cd Nutrinow_Frontend
+npm install
+npm run dev
+```
+
+Crie `.env` com:
+
+```env
+VITE_API_URL=http://127.0.0.1:8000
+```

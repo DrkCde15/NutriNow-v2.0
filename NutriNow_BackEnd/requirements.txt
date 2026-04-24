@@ -4,11 +4,9 @@ langchain
 langchain-community
 langchain-core
 pydantic
-Pillow
 Flask
 Flask-Cors
 Werkzeug
 ollama
 requests
-google-genai
 oauthlib
