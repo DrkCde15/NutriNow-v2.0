@@ -7,7 +7,7 @@ from email.mime.multipart import MIMEMultipart
 logger = logging.getLogger(__name__)
 
 def envoyer_email(destinatario, assunto, mensagem_html):
-    remetente = os.getenv("EMAIL_SENDER", "nnutrinow@gmail.com")
+    remetente = os.getenv("EMAIL_SENDER")
     senha = os.getenv("EMAIL_PASSWORD")
 
     msg = MIMEMultipart("alternative")

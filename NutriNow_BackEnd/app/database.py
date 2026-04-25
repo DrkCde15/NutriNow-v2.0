@@ -5,10 +5,10 @@ from flask import current_app
 
 def get_db_connection():
     return mysql.connector.connect(
-        host=os.getenv('MYSQL_HOST', 'localhost'),
-        user=os.getenv('MYSQL_USER', 'root'),
-        password=os.getenv('MYSQL_PASSWORD', ''),
-        database=os.getenv('MYSQL_DATABASE', 'nutrinow2')
+        host=os.getenv('MYSQL_HOST'),
+        user=os.getenv('MYSQL_USER'),
+        password=os.getenv('MYSQL_PASSWORD'),
+        database=os.getenv('MYSQL_DATABASE')
     )
 
 @contextmanager

@@ -11,7 +11,6 @@ from app.routes.fitness import fitness_bp
 
 def _build_allowed_origins():
     defaults = [
-        "https://drkcde15.github.io",
         "https://nutrinow-app.jcesarsantana215.workers.dev",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
@@ -39,20 +38,17 @@ def create_app():
     load_dotenv()
     app = Flask(__name__)
 
-    app.secret_key = os.getenv("FLASK_SECRET_KEY", "nutrinow_super_secret_key_123")
+    app.secret_key = os.getenv("FLASK_SECRET_KEY")
     os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
     app.config.update(
-        JWT_SECRET_KEY=os.getenv("JWT_SECRET_KEY", "nutrinow_jwt_secret_key_999"),
+        JWT_SECRET_KEY=os.getenv("JWT_SECRET_KEY"),
         JWT_ACCESS_TOKEN_EXPIRES=timedelta(days=30),
     )
 
     JWTManager(app)
 
     allowed_origins = _build_allowed_origins()
-
-    # DEBUG (remove depois)
-    print("CORS ALLOWED ORIGINS:", allowed_origins)
 
     CORS(
         app,

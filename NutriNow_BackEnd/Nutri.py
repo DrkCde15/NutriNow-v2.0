@@ -40,30 +40,30 @@ class NutritionistAgent:
         self.user_id = user_id
         self.email = email
         self.db_config = mysql_config or {
-            "host": os.getenv("MYSQL_HOST", "localhost"),
-            "user": os.getenv("MYSQL_USER", "root"),
-            "password": os.getenv("MYSQL_PASSWORD", ""),
-            "database": os.getenv("MYSQL_DATABASE", "nutrinow2"),
-            "port": int(os.getenv("MYSQL_PORT", 3306)),
+            "host": os.getenv("MYSQL_HOST"),
+            "user": os.getenv("MYSQL_USER"),
+            "password": os.getenv("MYSQL_PASSWORD"),
+            "database": os.getenv("MYSQL_DATABASE"),
+            "port": int(os.getenv("MYSQL_PORT")),
         }
 
         # Groq only
-        self.groq_api_key = os.getenv("GROQ_API_KEY") or os.getenv("GROQ_KEY")
+        self.groq_api_key = os.getenv("GROQ_API_KEY")
         self.groq_base_url = os.getenv("GROQ_BASE_URL").rstrip("/")
         self.groq_timeout_seconds = self._resolve_groq_timeout_seconds()
-        self.max_retries = int(os.getenv("GROQ_MAX_RETRIES", "5"))
-        self.temperature = float(os.getenv("GROQ_TEMPERATURE", "0.7"))
+        self.max_retries = int(os.getenv("GROQ_MAX_RETRIES"))
+        self.temperature = float(os.getenv("GROQ_TEMPERATURE"))
 
-        self.model_name = os.getenv("GROQ_PRIMARY_MODEL", "groq/compound-mini")
-        fallback_models_raw = os.getenv("GROQ_FALLBACK_MODELS", "groq/compound")
+        self.model_name = os.getenv("GROQ_PRIMARY_MODEL")
+        fallback_models_raw = os.getenv("GROQ_FALLBACK_MODELS")
         self.fallback_models = [m.strip() for m in fallback_models_raw.split(",") if m.strip()]
 
         if not self.groq_api_key:
-            logger.warning("GROQ_API_KEY/GROQ_KEY nao encontrada no .env")
+            logger.warning("GROQ_API_KEY nao encontrada no .env")
 
     @staticmethod
     def _resolve_groq_timeout_seconds() -> int:
-        raw = os.getenv("GROQ_TIMEOUT_SECONDS", "60")
+        raw = os.getenv("GROQ_TIMEOUT_SECONDS")
         try:
             timeout = int(float(raw))
         except (TypeError, ValueError):
@@ -94,7 +94,7 @@ class NutritionistAgent:
 
     def _call_groq_chat_completion(self, messages: List[Dict[str, str]], model: str) -> str:
         if not self.groq_api_key:
-            raise RuntimeError("GROQ_API_KEY/GROQ_KEY nao configurada")
+            raise RuntimeError("GROQ_API_KEY nao configurada")
 
         url = f"{self.groq_base_url}/chat/completions"
         headers = {
