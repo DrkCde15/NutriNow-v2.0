@@ -80,6 +80,21 @@ CREATE TABLE IF NOT EXISTS dieta_treino (
     FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
 
+-- Tabela de feedbacks
+CREATE TABLE IF NOT EXISTS feedbacks (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NULL,
+    nome VARCHAR(120) NOT NULL,
+    email VARCHAR(255),
+    rating TINYINT UNSIGNED NOT NULL,
+    message TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_feedbacks_user (user_id),
+    INDEX idx_feedbacks_created (created_at),
+    CONSTRAINT fk_feedbacks_user FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+    CONSTRAINT chk_feedbacks_rating CHECK (rating BETWEEN 1 AND 5)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 delete from chat_history WHERE id > 0;
 ALTER TABLE chat_history AUTO_INCREMENT = 1;
 

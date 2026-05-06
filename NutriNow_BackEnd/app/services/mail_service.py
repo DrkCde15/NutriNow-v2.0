@@ -7,8 +7,13 @@ from email.mime.multipart import MIMEMultipart
 logger = logging.getLogger(__name__)
 
 def envoyer_email(destinatario, assunto, mensagem_html):
-    remetente = os.getenv("EMAIL_SENDER")
-    senha = os.getenv("EMAIL_PASSWORD")
+    remetente = (os.getenv("EMAIL_SENDER") or "").strip().strip('"').strip("'")
+    senha = (os.getenv("EMAIL_PASSWORD") or "").strip().strip('"').strip("'")
+    senha = senha.replace(" ", "")
+
+    if not remetente or not senha:
+        logger.error("EMAIL_SENDER/EMAIL_PASSWORD nao configurados corretamente")
+        return False
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = assunto
@@ -23,5 +28,5 @@ def envoyer_email(destinatario, assunto, mensagem_html):
             server.sendmail(remetente, destinatario, msg.as_string())
         return True
     except Exception as e:
-        logger.error(f"Erro ao enviar email: {e}")
+        logger.error(f"Erro ao enviar email para {destinatario} usando {remetente}: {e}")
         return False

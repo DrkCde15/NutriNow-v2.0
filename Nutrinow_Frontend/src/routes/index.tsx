@@ -258,9 +258,19 @@ function Footer() {
           </span>
           <span className="font-display font-semibold">NutriNow</span>
         </div>
-        <p className="text-sm text-muted-foreground">
-          © {new Date().getFullYear()} NutriNow. Feito com cuidado para sua saúde.
-        </p>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/feedbacks"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-smooth hover:border-primary/40 hover:text-primary"
+            aria-label="Abrir pagina de feedbacks"
+            title="Feedbacks"
+          >
+            <MessageCircle className="h-5 w-5" />
+          </Link>
+          <p className="text-sm text-muted-foreground">
+            © {new Date().getFullYear()} NutriNow. Feito com cuidado para sua saúde.
+          </p>
+        </div>
       </div>
     </footer>
   );

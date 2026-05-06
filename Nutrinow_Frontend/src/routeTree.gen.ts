@@ -13,6 +13,7 @@ import { Route as ResetSenhaRouteImport } from './routes/reset-senha'
 import { Route as PlanosRouteImport } from './routes/planos'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as FeedbacksRouteImport } from './routes/feedbacks'
 import { Route as EsqueciSenhaRouteImport } from './routes/esqueci-senha'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ChatRouteImport } from './routes/chat'
@@ -38,6 +39,11 @@ const PerfilRoute = PerfilRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FeedbacksRoute = FeedbacksRouteImport.update({
+  id: '/feedbacks',
+  path: '/feedbacks',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EsqueciSenhaRoute = EsqueciSenhaRouteImport.update({
@@ -78,6 +84,7 @@ export interface FileRoutesByFullPath {
   '/chat': typeof ChatRoute
   '/dashboard': typeof DashboardRoute
   '/esqueci-senha': typeof EsqueciSenhaRoute
+  '/feedbacks': typeof FeedbacksRoute
   '/login': typeof LoginRoute
   '/perfil': typeof PerfilRoute
   '/planos': typeof PlanosRoute
@@ -90,6 +97,7 @@ export interface FileRoutesByTo {
   '/chat': typeof ChatRoute
   '/dashboard': typeof DashboardRoute
   '/esqueci-senha': typeof EsqueciSenhaRoute
+  '/feedbacks': typeof FeedbacksRoute
   '/login': typeof LoginRoute
   '/perfil': typeof PerfilRoute
   '/planos': typeof PlanosRoute
@@ -103,6 +111,7 @@ export interface FileRoutesById {
   '/chat': typeof ChatRoute
   '/dashboard': typeof DashboardRoute
   '/esqueci-senha': typeof EsqueciSenhaRoute
+  '/feedbacks': typeof FeedbacksRoute
   '/login': typeof LoginRoute
   '/perfil': typeof PerfilRoute
   '/planos': typeof PlanosRoute
@@ -117,6 +126,7 @@ export interface FileRouteTypes {
     | '/chat'
     | '/dashboard'
     | '/esqueci-senha'
+    | '/feedbacks'
     | '/login'
     | '/perfil'
     | '/planos'
@@ -129,6 +139,7 @@ export interface FileRouteTypes {
     | '/chat'
     | '/dashboard'
     | '/esqueci-senha'
+    | '/feedbacks'
     | '/login'
     | '/perfil'
     | '/planos'
@@ -141,6 +152,7 @@ export interface FileRouteTypes {
     | '/chat'
     | '/dashboard'
     | '/esqueci-senha'
+    | '/feedbacks'
     | '/login'
     | '/perfil'
     | '/planos'
@@ -154,6 +166,7 @@ export interface RootRouteChildren {
   ChatRoute: typeof ChatRoute
   DashboardRoute: typeof DashboardRoute
   EsqueciSenhaRoute: typeof EsqueciSenhaRoute
+  FeedbacksRoute: typeof FeedbacksRoute
   LoginRoute: typeof LoginRoute
   PerfilRoute: typeof PerfilRoute
   PlanosRoute: typeof PlanosRoute
@@ -188,6 +201,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/feedbacks': {
+      id: '/feedbacks'
+      path: '/feedbacks'
+      fullPath: '/feedbacks'
+      preLoaderRoute: typeof FeedbacksRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/esqueci-senha': {
@@ -242,6 +262,7 @@ const rootRouteChildren: RootRouteChildren = {
   ChatRoute: ChatRoute,
   DashboardRoute: DashboardRoute,
   EsqueciSenhaRoute: EsqueciSenhaRoute,
+  FeedbacksRoute: FeedbacksRoute,
   LoginRoute: LoginRoute,
   PerfilRoute: PerfilRoute,
   PlanosRoute: PlanosRoute,
