@@ -3,6 +3,7 @@ import os
 import logging
 import random
 import time
+from datetime import date, datetime
 from typing import List, Optional, Dict
 import mysql.connector
 import requests
@@ -29,9 +30,21 @@ analise de dietas e motivacao constante.
 - Use sempre **Negrito** para destacar nomes de alimentos, macros ou termos tecnicos.
 - Utilize listas (bullet points) para organizar sugestoes.
 - Se o usuario perguntar algo fora do escopo de saude/nutricao, responda gentilmente que seu foco e o bem-estar dele.
+- Use o contexto do perfil e da agenda do NutriNow quando eles estiverem disponiveis.
+- Nunca invente eventos da agenda; se nao houver agenda no contexto, diga que nao encontrou itens agendados.
 - Finalize sempre com uma frase de incentivo baseada no objetivo do usuario.
 - Formate suas respostas em Markdown rico (use > para citacoes e alertas).
 """
+
+WEEKDAY_LABELS = {
+    "MO": "segunda",
+    "TU": "terca",
+    "WE": "quarta",
+    "TH": "quinta",
+    "FR": "sexta",
+    "SA": "sabado",
+    "SU": "domingo",
+}
 
 
 class NutritionistAgent:
@@ -166,6 +179,110 @@ class NutritionistAgent:
     def _get_db_connection(self):
         return mysql.connector.connect(**self.db_config)
 
+    @staticmethod
+    def _to_datetime(value) -> datetime:
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, date):
+            return datetime.combine(value, datetime.min.time())
+        if isinstance(value, str):
+            normalized = value.replace("Z", "+00:00")
+            try:
+                return datetime.fromisoformat(normalized).replace(tzinfo=None)
+            except ValueError:
+                pass
+
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+                try:
+                    return datetime.strptime(value, fmt)
+                except ValueError:
+                    continue
+        return datetime.now()
+
+    @staticmethod
+    def _clean_context_text(value, max_length: int = 180) -> str:
+        text = " ".join(str(value or "").split())
+        if len(text) <= max_length:
+            return text
+        return f"{text[: max_length - 3].rstrip()}..."
+
+    @staticmethod
+    def _parse_recurrence_days(value) -> List[str]:
+        days = []
+        for part in str(value or "").split(","):
+            day = part.strip().upper()
+            if day in WEEKDAY_LABELS and day not in days:
+                days.append(day)
+        return days
+
+    @classmethod
+    def _format_recurrence(cls, item: Dict) -> str:
+        recurrence_type = str(item.get("recurrence_type") or "none").lower()
+        if recurrence_type != "weekly":
+            return "recorrencia: nao"
+
+        recurrence_days = cls._parse_recurrence_days(item.get("recurrence_days"))
+        if not recurrence_days:
+            return "recorrencia: semanal"
+
+        day_labels = ", ".join(WEEKDAY_LABELS[day] for day in recurrence_days)
+        recurrence = f"recorrencia: semanal em {day_labels}"
+        recurrence_until = item.get("recurrence_until")
+        if recurrence_until:
+            until_date = cls._to_datetime(recurrence_until).strftime("%d/%m/%Y")
+            recurrence += f" ate {until_date}"
+        return recurrence
+
+    @staticmethod
+    def _item_start_datetime(item: Dict) -> datetime:
+        start = NutritionistAgent._to_datetime(item.get("created_at"))
+        time_value = str(item.get("time") or "").strip()
+
+        if len(time_value) == 5 and time_value[2] == ":":
+            try:
+                hours, minutes = [int(part) for part in time_value.split(":")]
+                start = start.replace(hour=hours, minute=minutes, second=0, microsecond=0)
+            except ValueError:
+                pass
+
+        return start
+
+    @staticmethod
+    def _resolve_dieta_user_column(cursor) -> str:
+        cursor.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'dieta_treino'
+              AND column_name IN ('user_id', 'usuario_id')
+            """
+        )
+        columns = {
+            row.get("column_name") or row.get("COLUMN_NAME")
+            for row in cursor.fetchall()
+        }
+        if "user_id" in columns:
+            return "user_id"
+        if "usuario_id" in columns:
+            return "usuario_id"
+        return "user_id"
+
+    @staticmethod
+    def _get_dieta_treino_columns(cursor) -> set:
+        cursor.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'dieta_treino'
+            """
+        )
+        return {
+            row.get("column_name") or row.get("COLUMN_NAME")
+            for row in cursor.fetchall()
+        }
+
     def _get_user_context(self) -> str:
         """Busca informacoes do perfil do usuario para injetar no prompt."""
         if not self.user_id:
@@ -192,6 +309,89 @@ class NutritionistAgent:
                 return contexto
         except Exception as e:
             logger.error(f"Erro ao buscar contexto do usuario: {e}")
+        return ""
+
+    def _get_calendar_context(self, limit: int = 12) -> str:
+        """Busca itens de dieta/treino agendados para injetar no prompt."""
+        if not self.user_id:
+            return ""
+
+        try:
+            conn = self._get_db_connection()
+            cursor = conn.cursor(dictionary=True)
+            columns = self._get_dieta_treino_columns(cursor)
+            if not columns:
+                conn.close()
+                return ""
+
+            user_column = self._resolve_dieta_user_column(cursor)
+            duration_expr = "duration_minutes" if "duration_minutes" in columns else "60 AS duration_minutes"
+            recurrence_type_expr = "recurrence_type" if "recurrence_type" in columns else "'none' AS recurrence_type"
+            recurrence_days_expr = "recurrence_days" if "recurrence_days" in columns else "NULL AS recurrence_days"
+            recurrence_until_expr = (
+                "DATE_FORMAT(recurrence_until, '%Y-%m-%d') AS recurrence_until"
+                if "recurrence_until" in columns
+                else "NULL AS recurrence_until"
+            )
+
+            cursor.execute(
+                f"""
+                SELECT
+                    id,
+                    tipo,
+                    title,
+                    description,
+                    time,
+                    created_at,
+                    updated_at,
+                    {duration_expr},
+                    {recurrence_type_expr},
+                    {recurrence_days_expr},
+                    {recurrence_until_expr}
+                FROM dieta_treino
+                WHERE {user_column}=%s
+                ORDER BY
+                    CASE
+                        WHEN recurrence_type = 'weekly'
+                          AND (recurrence_until IS NULL OR recurrence_until >= CURDATE()) THEN 0
+                        WHEN created_at >= NOW() THEN 1
+                        ELSE 2
+                    END,
+                    created_at ASC
+                LIMIT %s
+                """,
+                (self.user_id, limit),
+            )
+            items = cursor.fetchall() or []
+            conn.close()
+
+            if not items:
+                return "\n\n[CONTEXTO DA AGENDA DO USUARIO]: Nenhum treino ou dieta agendado no NutriNow."
+
+            lines = []
+            for item in items:
+                tipo = str(item.get("tipo") or "").lower()
+                tipo_label = "Treino" if tipo == "treino" else "Dieta"
+                title = self._clean_context_text(item.get("title"), 80) or "Sem titulo"
+                description = self._clean_context_text(item.get("description"))
+                start = self._item_start_datetime(item)
+                duration = int(item.get("duration_minutes") or 60)
+                updated_at = self._to_datetime(item.get("updated_at")).strftime("%d/%m/%Y")
+
+                parts = [
+                    f"{tipo_label}: {title}",
+                    f"quando: {start.strftime('%d/%m/%Y %H:%M')}",
+                    f"duracao: {duration} min",
+                    self._format_recurrence(item),
+                    f"atualizado: {updated_at}",
+                ]
+                if description:
+                    parts.append(f"descricao: {description}")
+                lines.append(f"- {' | '.join(parts)}")
+
+            return "\n\n[CONTEXTO DA AGENDA DO USUARIO]:\n" + "\n".join(lines)
+        except Exception as e:
+            logger.error(f"Erro ao buscar contexto da agenda: {e}")
         return ""
 
     def get_conversation_history(self, limit: int = 10, by_user: bool = False) -> List[Dict]:
@@ -254,9 +454,10 @@ class NutritionistAgent:
         """Processa uma mensagem de texto usando Groq."""
         try:
             user_context = self._get_user_context()
+            calendar_context = self._get_calendar_context()
             chat_history = self.get_conversation_history(limit=6)
 
-            messages: List[Dict[str, str]] = [{"role": "system", "content": f"{SYSTEM_PROMPT}{user_context}"}]
+            messages: List[Dict[str, str]] = [{"role": "system", "content": f"{SYSTEM_PROMPT}{user_context}{calendar_context}"}]
             for msg in chat_history:
                 role = "user" if msg["role"] == "user" else "assistant"
                 messages.append({"role": role, "content": msg["content"]})
