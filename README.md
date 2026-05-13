@@ -43,7 +43,7 @@ O NutriNow reduz essa friccao com orientacao continua, historico e contexto pess
 - 📧 Recuperacao de senha por e-mail.
 - 👤 Perfil com meta, peso, altura e historico.
 - 🥗 CRUD de dieta e treino.
-- Google Calendar: conexao OAuth e sincronizacao automatica dos itens de dieta/treino.
+- Google Calendar: conexao OAuth, recorrencia semanal e sincronizacao automatica dos itens de dieta/treino.
 - 🤖 Chat com NutriAI (texto) com memoria no MySQL.
 - 📸 Endpoint de analise de imagem disponivel (agente atual em modo texto).
 
@@ -63,10 +63,57 @@ O NutriNow reduz essa friccao com orientacao continua, historico e contexto pess
 
 ## 🧱 Stack (para contexto)
 
-- Frontend: React + TypeScript + Vite.
-- Backend: Flask + JWT.
-- Banco: MySQL.
-- IA: Groq (chat).
+### Frontend
+
+- React 19 com TypeScript.
+- Vite 7 para desenvolvimento, build e preview.
+- TanStack Router/TanStack Start para roteamento e estrutura da aplicação.
+- TanStack Query para controle de estado assíncrono e chamadas à API.
+- Tailwind CSS 4 para estilos utilitários.
+- Radix UI como base de componentes acessíveis.
+- Lucide React para ícones.
+- React Hook Form + Zod para formulários e validação.
+- Date-fns para manipulação de datas no calendário.
+- Recharts para visualizações e gráficos.
+- Sonner para notificações.
+
+### Backend
+
+- Python com Flask como API HTTP.
+- Flask-Cors para liberar comunicação entre frontend e backend em ambiente local.
+- MySQL Connector para acesso ao banco de dados.
+- Python-dotenv para leitura das variáveis do `.env`.
+- Requests + OAuthlib para integrações externas via HTTP/OAuth.
+- Werkzeug para recursos auxiliares de segurança e utilidades web.
+- Serviços organizados em rotas e módulos internos (`auth`, `profile`, `fitness`, `calendar`, `chatbot`, `feedbacks`).
+
+### Banco de dados
+
+- MySQL 8+.
+- Schema principal documentado em `NutriNow_BackEnd/SQL.txt`.
+- Armazena usuários, perfil, dieta/treino, histórico do chat, feedbacks e tokens/eventos vinculados ao Google Calendar.
+
+### Autenticação e integrações
+
+- Login tradicional com e-mail/senha.
+- Google OAuth 2.0 para autenticação.
+- Google Calendar API para criar, atualizar e excluir eventos automaticamente a partir dos itens de dieta/treino.
+- Recuperação de senha por e-mail via serviço SMTP configurado no backend.
+- Integração com Groq em formato compatível com OpenAI API para o chat NutriAI.
+
+### IA
+
+- NutriAI roda no backend e usa histórico/contexto do usuário salvo no MySQL.
+- Dependências de LangChain estão presentes para evolução do agente e orquestração de fluxos.
+- Há suporte configurável por variáveis de ambiente para modelo principal, fallback, timeout, retries e temperatura.
+
+### Tooling e qualidade
+
+- TypeScript para tipagem no frontend.
+- ESLint e Prettier para padronização do código frontend.
+- Scripts npm principais: `dev`, `build`, `preview`, `lint` e `format`.
+- Build do frontend com Vite.
+- Backend executado diretamente com `python App.py`.
 
 ---
 

@@ -15,6 +15,10 @@ interface ApiPlanItem {
   description: string;
   time?: string | null;
   created_at?: string;
+  duration_minutes?: number | null;
+  recurrence_type?: "none" | "weekly" | null;
+  recurrence_days?: string | null;
+  recurrence_until?: string | null;
 }
 
 interface GoogleCalendarStatus {
@@ -47,7 +51,7 @@ export const Route = createFileRoute("/calendario")({
   component: CalendarioPage,
   head: () => ({
     meta: [
-      { title: "Calendario — NutriNow" },
+      { title: "Calendario - NutriNow" },
       {
         name: "description",
         content: "Visualize treinos e dietas em um calendario mensal.",
@@ -76,8 +80,108 @@ function toDateInputValue(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+function getTimeInputValue(date = new Date()) {
+  const hours = `${date.getHours()}`.padStart(2, "0");
+  const minutes = `${date.getMinutes()}`.padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+const weekDayOptions = [
+  { code: "MO", label: "Seg" },
+  { code: "TU", label: "Ter" },
+  { code: "WE", label: "Qua" },
+  { code: "TH", label: "Qui" },
+  { code: "FR", label: "Sex" },
+  { code: "SA", label: "Sab" },
+  { code: "SU", label: "Dom" },
+] as const;
+
+type GoogleDayCode = (typeof weekDayOptions)[number]["code"];
+
+const jsDayToGoogleDay: GoogleDayCode[] = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+
+function getGoogleDayCode(date = new Date()) {
+  return jsDayToGoogleDay[date.getDay()];
+}
+
+function parseDateOnly(value: string) {
+  const isoDate = value.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+    const [year, month, day] = isoDate.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }
+  return new Date(value);
+}
+
+function startOfDay(date: Date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function endOfDay(date: Date) {
+  const next = new Date(date);
+  next.setHours(23, 59, 59, 999);
+  return next;
+}
+
+function expandPlanItem(item: ApiPlanItem, params: { year: number; month: number }): CalendarItem[] {
+  const baseStart = new Date(toStartsAt(item.created_at, item.time));
+  const baseItem = {
+    planId: item.id,
+    type: item.tipo,
+    title: item.title,
+    description: item.description,
+    time: item.time ?? null,
+    scheduleDate: toDateInputValue(baseStart),
+    durationMinutes: item.duration_minutes ?? 60,
+    recurrenceType: item.recurrence_type ?? "none",
+    recurrenceDays: item.recurrence_days ?? null,
+    recurrenceUntil: item.recurrence_until ?? null,
+  };
+
+  if (item.recurrence_type !== "weekly" || !item.recurrence_days) {
+    return [
+      {
+        id: `${item.tipo}-${item.id}`,
+        startsAt: baseStart.toISOString(),
+        ...baseItem,
+      },
+    ];
+  }
+
+  const recurrenceDays = new Set(item.recurrence_days.split(",").map((day) => day.trim()));
+  const monthStart = startOfDay(new Date(params.year, params.month - 1, 1));
+  const monthEnd = endOfDay(new Date(params.year, params.month, 0));
+  const seriesStart = startOfDay(baseStart);
+  const seriesEnd = item.recurrence_until ? endOfDay(parseDateOnly(item.recurrence_until)) : monthEnd;
+  const firstDay = monthStart > seriesStart ? monthStart : seriesStart;
+  const occurrences: CalendarItem[] = [];
+
+  for (let cursor = new Date(firstDay); cursor <= monthEnd && cursor <= seriesEnd; cursor = addDays(cursor, 1)) {
+    if (!recurrenceDays.has(getGoogleDayCode(cursor))) continue;
+
+    const startsAt = new Date(cursor);
+    startsAt.setHours(baseStart.getHours(), baseStart.getMinutes(), 0, 0);
+    occurrences.push({
+      id: `${item.tipo}-${item.id}-${toDateInputValue(startsAt)}`,
+      startsAt: startsAt.toISOString(),
+      isRecurring: true,
+      ...baseItem,
+    });
+  }
+
+  return occurrences;
+}
+
 function CalendarioPage() {
-  const { user, token } = useAuth();
+  const { user, token, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [googleStatus, setGoogleStatus] = useState<GoogleCalendarStatus>({ connected: false });
   const [googleLoading, setGoogleLoading] = useState(true);
@@ -86,19 +190,36 @@ function CalendarioPage() {
   const [googleError, setGoogleError] = useState("");
   const [calendarRefresh, setCalendarRefresh] = useState(0);
   const [itemModalOpen, setItemModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<CalendarItem | null>(null);
   const [itemSaving, setItemSaving] = useState(false);
+  const [deletingItemId, setDeletingItemId] = useState<number | null>(null);
   const [itemError, setItemError] = useState("");
-  const [itemForm, setItemForm] = useState({
+  const [itemForm, setItemForm] = useState<{
+    tipo: ApiPlanType;
+    title: string;
+    description: string;
+    date: string;
+    time: string;
+    durationHours: string;
+    recurrenceType: "none" | "weekly";
+    recurrenceDays: GoogleDayCode[];
+    recurrenceUntil: string;
+  }>({
     tipo: "treino" as ApiPlanType,
     title: "",
     description: "",
     date: toDateInputValue(),
     time: "08:00",
+    durationHours: "2",
+    recurrenceType: "none" as "none" | "weekly",
+    recurrenceDays: [getGoogleDayCode()],
+    recurrenceUntil: toDateInputValue(addDays(new Date(), 84)),
   });
 
   useEffect(() => {
-    if (!user || !token) navigate({ to: "/login" });
-  }, [user, token, navigate]);
+    if (authLoading) return;
+    if (!user || !token) navigate({ to: "/login", replace: true });
+  }, [authLoading, user, token, navigate]);
 
   const loadGoogleStatus = useCallback(async () => {
     if (!token) return;
@@ -212,56 +333,144 @@ function CalendarioPage() {
 
   const openNewItemModal = () => {
     setItemError("");
+    setEditingItem(null);
     setItemForm({
       tipo: "treino",
       title: "",
       description: "",
       date: toDateInputValue(),
       time: "08:00",
+      durationHours: "2",
+      recurrenceType: "none",
+      recurrenceDays: [getGoogleDayCode()],
+      recurrenceUntil: toDateInputValue(addDays(new Date(), 84)),
     });
     setItemModalOpen(true);
   };
 
-  const createCalendarItem = async (event: FormEvent) => {
+  const openEditItemModal = (item: CalendarItem) => {
+    const durationHours = item.durationMinutes ? `${item.durationMinutes / 60}` : "1";
+    const recurrenceDays = (item.recurrenceDays ?? "")
+      .split(",")
+      .map((day) => day.trim())
+      .filter((day): day is GoogleDayCode => weekDayOptions.some((option) => option.code === day));
+
+    setItemError("");
+    setEditingItem(item);
+    setItemForm({
+      tipo: item.type,
+      title: item.title,
+      description: item.description ?? "",
+      date: item.scheduleDate ?? toDateInputValue(new Date(item.startsAt)),
+      time: item.time ?? getTimeInputValue(new Date(item.startsAt)),
+      durationHours,
+      recurrenceType: item.recurrenceType === "weekly" ? "weekly" : "none",
+      recurrenceDays: recurrenceDays.length > 0 ? recurrenceDays : [getGoogleDayCode(new Date(item.startsAt))],
+      recurrenceUntil: item.recurrenceUntil ?? toDateInputValue(addDays(new Date(item.startsAt), 84)),
+    });
+    setItemModalOpen(true);
+  };
+
+  const saveCalendarItem = async (event: FormEvent) => {
     event.preventDefault();
     if (!token) return;
 
-    setItemSaving(true);
     setItemError("");
     setGoogleMessage("");
     setGoogleError("");
 
+    const durationHours = Number(itemForm.durationHours);
+    if (!Number.isFinite(durationHours) || durationHours < 0.25 || durationHours > 12) {
+      setItemError("Informe uma duracao entre 15 minutos e 12 horas.");
+      return;
+    }
+
+    setItemSaving(true);
+
     try {
-      const result = await apiRequest<SavePlanResponse>("/dieta-treino", {
-        method: "POST",
-        token,
-        body: JSON.stringify({
-          tipo: itemForm.tipo,
-          title: itemForm.title.trim(),
-          description: itemForm.description.trim(),
-          date: itemForm.date,
-          time: itemForm.time || null,
-        }),
-      });
+      const durationMinutes = Math.round(durationHours * 60);
+      const isEditing = Boolean(editingItem?.planId);
+      const result = await apiRequest<SavePlanResponse>(
+        isEditing ? `/dieta-treino/${editingItem?.planId}` : "/dieta-treino",
+        {
+          method: isEditing ? "PUT" : "POST",
+          token,
+          body: JSON.stringify({
+            tipo: itemForm.tipo,
+            title: itemForm.title.trim(),
+            description: itemForm.description.trim(),
+            date: itemForm.date,
+            time: itemForm.time || null,
+            durationMinutes,
+            recurrenceType: itemForm.recurrenceType,
+            recurrenceDays: itemForm.recurrenceType === "weekly" ? itemForm.recurrenceDays : [],
+            recurrenceUntil: itemForm.recurrenceType === "weekly" ? itemForm.recurrenceUntil : null,
+          }),
+        },
+      );
 
       setItemModalOpen(false);
+      setEditingItem(null);
       setCalendarRefresh((value) => value + 1);
 
       if (result.googleCalendar?.synced) {
-        setGoogleMessage("Item criado e sincronizado com Google Calendar.");
+        setGoogleMessage(isEditing ? "Item atualizado e sincronizado com Google Calendar." : "Item criado e sincronizado com Google Calendar.");
       } else if (googleStatus.connected) {
-        setGoogleError(result.googleCalendar?.error || "Item criado, mas o Google Calendar nao sincronizou.");
+        setGoogleError(result.googleCalendar?.error || "Item salvo, mas o Google Calendar nao sincronizou.");
       } else {
-        setGoogleMessage("Item criado no calendario do NutriNow.");
+        setGoogleMessage(isEditing ? "Item atualizado no calendario do NutriNow." : "Item criado no calendario do NutriNow.");
       }
     } catch (err) {
-      setItemError(err instanceof Error ? err.message : "Erro ao criar item");
+      setItemError(err instanceof Error ? err.message : "Erro ao salvar item");
     } finally {
       setItemSaving(false);
     }
   };
 
-  const loadEvents = useCallback(async (): Promise<CalendarItem[]> => {
+  const deleteCalendarItem = async (item: CalendarItem) => {
+    if (!token || !item.planId) return;
+    const message = item.isRecurring
+      ? "Excluir esta serie semanal?"
+      : "Excluir este item?";
+    if (!confirm(message)) return;
+
+    setDeletingItemId(item.planId);
+    setGoogleMessage("");
+    setGoogleError("");
+
+    try {
+      const result = await apiRequest<SavePlanResponse>(`/dieta-treino/${item.planId}`, {
+        method: "DELETE",
+        token,
+      });
+      setCalendarRefresh((value) => value + 1);
+
+      if (googleStatus.connected && result.googleCalendar?.error) {
+        setGoogleError(result.googleCalendar.error);
+      } else {
+        setGoogleMessage("Item excluido do calendario.");
+      }
+    } catch (err) {
+      setGoogleError(err instanceof Error ? err.message : "Erro ao excluir item");
+    } finally {
+      setDeletingItemId(null);
+    }
+  };
+
+  const toggleRecurrenceDay = (day: GoogleDayCode) => {
+    setItemForm((current) => {
+      const selected = current.recurrenceDays.includes(day)
+        ? current.recurrenceDays.filter((item) => item !== day)
+        : [...current.recurrenceDays, day];
+
+      return {
+        ...current,
+        recurrenceDays: selected.length > 0 ? selected : current.recurrenceDays,
+      };
+    });
+  };
+
+  const loadEvents = useCallback(async (params: { year: number; month: number }): Promise<CalendarItem[]> => {
     if (!token) return [];
     void calendarRefresh;
 
@@ -276,18 +485,14 @@ function CalendarioPage() {
       }),
     ]);
 
-    return [...(treinos.items ?? []), ...(dietas.items ?? [])].map((item) => ({
-      id: `${item.tipo}-${item.id}`,
-      type: item.tipo,
-      startsAt: toStartsAt(item.created_at, item.time),
-      title: item.title,
-      description: item.description,
-    }));
+    return [...(treinos.items ?? []), ...(dietas.items ?? [])].flatMap((item) =>
+      expandPlanItem(item, params),
+    );
   }, [token, calendarRefresh]);
 
   const canSync = googleStatus.connected && !googleStatus.needsReconnect && googleAction === null;
 
-  if (!user || !token) return null;
+  if (authLoading || !user || !token) return null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -297,7 +502,7 @@ function CalendarioPage() {
         <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="font-display text-3xl font-bold md:text-4xl">
-              Calendario de treinos e dietas
+              Calendario para treinos e dietas
             </h1>
             <p className="mt-2 max-w-2xl text-muted-foreground">
               Veja sua agenda do mes em um unico lugar. Os eventos sao carregados da sua base atual de
@@ -359,7 +564,7 @@ function CalendarioPage() {
                     className="inline-flex items-center gap-2 rounded-xl bg-gradient-hero px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-smooth hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     <RefreshCw className={`h-4 w-4 ${googleAction === "sync" ? "animate-spin" : ""}`} />
-                    Sincronizar
+                    Forçar sincronização
                   </button>
                   <button
                     type="button"
@@ -393,21 +598,28 @@ function CalendarioPage() {
           )}
         </section>
 
-        <TrainingDietCalendar loadEvents={loadEvents} />
+        <TrainingDietCalendar
+          loadEvents={loadEvents}
+          onEditItem={openEditItemModal}
+          onDeleteItem={deleteCalendarItem}
+          busyItemId={deletingItemId}
+        />
       </main>
 
       {itemModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foreground/40 p-4 backdrop-blur-sm sm:items-center"
           onClick={() => setItemModalOpen(false)}
         >
           <div
-            className="w-full max-w-lg rounded-2xl bg-card p-6 shadow-elegant sm:p-7"
+            className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl bg-card p-6 shadow-elegant sm:p-7"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-bold text-foreground">Adicionar item</h2>
+                <h2 className="text-xl font-bold text-foreground">
+                  {editingItem ? "Editar item" : "Adicionar item"}
+                </h2>
               </div>
               <button
                 type="button"
@@ -425,7 +637,7 @@ function CalendarioPage() {
               </div>
             )}
 
-            <form onSubmit={createCalendarItem} className="mt-5 space-y-4">
+            <form onSubmit={saveCalendarItem} className="mt-5 space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
@@ -475,7 +687,7 @@ function CalendarioPage() {
                 />
               </label>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-3">
                 <label className="block">
                   <span className="mb-1.5 block text-sm font-medium">Data</span>
                   <input
@@ -496,6 +708,82 @@ function CalendarioPage() {
                     className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </label>
+
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium">Duracao (h)</span>
+                  <input
+                    type="number"
+                    min="0.25"
+                    max="12"
+                    step="0.25"
+                    value={itemForm.durationHours}
+                    onChange={(event) => setItemForm((current) => ({ ...current, durationHours: event.target.value }))}
+                    required
+                    className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  />
+                </label>
+              </div>
+
+              <div className="space-y-3 rounded-xl border border-border bg-background p-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setItemForm((current) => ({ ...current, recurrenceType: "none" }))}
+                    className={`rounded-lg px-3 py-2 text-sm font-semibold transition-smooth ${
+                      itemForm.recurrenceType === "none"
+                        ? "bg-foreground text-background"
+                        : "bg-secondary text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Unico
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setItemForm((current) => ({ ...current, recurrenceType: "weekly" }))}
+                    className={`rounded-lg px-3 py-2 text-sm font-semibold transition-smooth ${
+                      itemForm.recurrenceType === "weekly"
+                        ? "bg-foreground text-background"
+                        : "bg-secondary text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Semanal
+                  </button>
+                </div>
+
+                {itemForm.recurrenceType === "weekly" && (
+                  <>
+                    <div className="grid grid-cols-7 gap-1">
+                      {weekDayOptions.map((day) => {
+                        const selected = itemForm.recurrenceDays.includes(day.code);
+                        return (
+                          <button
+                            key={day.code}
+                            type="button"
+                            onClick={() => toggleRecurrenceDay(day.code)}
+                            className={`rounded-lg px-2 py-2 text-xs font-semibold transition-smooth ${
+                              selected
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-secondary text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            {day.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <label className="block">
+                      <span className="mb-1.5 block text-sm font-medium">Ate</span>
+                      <input
+                        type="date"
+                        value={itemForm.recurrenceUntil}
+                        onChange={(event) => setItemForm((current) => ({ ...current, recurrenceUntil: event.target.value }))}
+                        required
+                        className="w-full rounded-xl border border-input bg-card px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      />
+                    </label>
+                  </>
+                )}
               </div>
 
               <div className="flex gap-3 pt-2">
@@ -511,7 +799,7 @@ function CalendarioPage() {
                   disabled={itemSaving}
                   className="flex-1 rounded-xl bg-gradient-hero px-5 py-3 text-sm font-semibold text-primary-foreground shadow-elegant transition-smooth hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {itemSaving ? "Salvando..." : "Adicionar"}
+                  {itemSaving ? "Salvando..." : editingItem ? "Salvar" : "Adicionar"}
                 </button>
               </div>
             </form>

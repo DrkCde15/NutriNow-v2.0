@@ -1,7 +1,7 @@
 import logging
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from urllib.parse import quote, urlencode, urlparse
 
 import requests
@@ -19,6 +19,7 @@ GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events"
 GOOGLE_CALENDAR_STATE_SALT = "nutrinow-google-calendar-oauth"
 TOKEN_EXPIRY_LEEWAY_SECONDS = 60
 DEFAULT_CALENDAR_ID = "primary"
+WEEKDAY_ORDER = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
 
 CREATE_GOOGLE_CALENDAR_TOKENS_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS google_calendar_tokens (
@@ -265,7 +266,10 @@ def _resolve_dieta_user_column(cursor):
               AND column_name IN ('user_id', 'usuario_id')
             """
         )
-        columns = {row["column_name"] for row in cursor.fetchall()}
+        columns = {
+            row.get("column_name") or row.get("COLUMN_NAME")
+            for row in cursor.fetchall()
+        }
         if "user_id" in columns:
             return "user_id"
         if "usuario_id" in columns:
@@ -275,11 +279,47 @@ def _resolve_dieta_user_column(cursor):
     return "user_id"
 
 
+def _ensure_dieta_treino_schedule_columns(cursor):
+    cursor.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = DATABASE()
+          AND table_name = 'dieta_treino'
+        """
+    )
+    columns = {
+        row.get("column_name") or row.get("COLUMN_NAME")
+        for row in cursor.fetchall()
+    }
+
+    if "duration_minutes" not in columns:
+        cursor.execute("ALTER TABLE dieta_treino ADD COLUMN duration_minutes INT NOT NULL DEFAULT 60")
+    if "recurrence_type" not in columns:
+        cursor.execute("ALTER TABLE dieta_treino ADD COLUMN recurrence_type VARCHAR(20) NOT NULL DEFAULT 'none'")
+    if "recurrence_days" not in columns:
+        cursor.execute("ALTER TABLE dieta_treino ADD COLUMN recurrence_days VARCHAR(32) NULL")
+    if "recurrence_until" not in columns:
+        cursor.execute("ALTER TABLE dieta_treino ADD COLUMN recurrence_until DATE NULL")
+
+
 def _fetch_local_calendar_items(cursor, user_id):
+    _ensure_dieta_treino_schedule_columns(cursor)
     user_column = _resolve_dieta_user_column(cursor)
     cursor.execute(
         f"""
-        SELECT id, tipo, title, description, time, created_at, updated_at
+        SELECT
+            id,
+            tipo,
+            title,
+            description,
+            time,
+            created_at,
+            updated_at,
+            duration_minutes,
+            recurrence_type,
+            recurrence_days,
+            DATE_FORMAT(recurrence_until, '%Y-%m-%d') AS recurrence_until
         FROM dieta_treino
         WHERE {user_column}=%s
         ORDER BY created_at ASC
@@ -300,16 +340,42 @@ def _item_start_datetime(item):
     return start
 
 
+def _format_recurrence_until(value):
+    if not value:
+        return None
+
+    if isinstance(value, datetime):
+        until_date = value.date()
+    elif isinstance(value, date):
+        until_date = value
+    else:
+        try:
+            until_date = datetime.strptime(str(value)[:10], "%Y-%m-%d").date()
+        except ValueError:
+            return None
+
+    return until_date.strftime("%Y%m%dT235959Z")
+
+
+def _parse_recurrence_days(value):
+    days = []
+    for part in str(value or "").split(","):
+        day = part.strip().upper()
+        if day in WEEKDAY_ORDER and day not in days:
+            days.append(day)
+    return days
+
+
 def _build_google_event(item, user_id):
     tipo = (item.get("tipo") or "").lower()
     tipo_label = "Treino" if tipo == "treino" else "Dieta"
     timezone = os.getenv("GOOGLE_CALENDAR_TIMEZONE", "America/Sao_Paulo")
-    duration_minutes = int(os.getenv("GOOGLE_CALENDAR_EVENT_DURATION_MINUTES", "60"))
+    duration_minutes = int(item.get("duration_minutes") or os.getenv("GOOGLE_CALENDAR_EVENT_DURATION_MINUTES", "60"))
     start = _item_start_datetime(item)
     end = start + timedelta(minutes=duration_minutes)
     description = " ".join(str(item.get("description") or "").split())
 
-    return {
+    event = {
         "summary": f"NutriNow - {tipo_label}: {item.get('title')}",
         "description": description,
         "start": {
@@ -325,10 +391,22 @@ def _build_google_event(item, user_id):
                 "nutrinow_item_id": str(item.get("id")),
                 "nutrinow_item_type": tipo,
                 "nutrinow_user_id": str(user_id),
+                "nutrinow_recurrence_type": str(item.get("recurrence_type") or "none"),
             }
         },
         "reminders": {"useDefault": True},
     }
+
+    recurrence_type = str(item.get("recurrence_type") or "none").lower()
+    recurrence_days = _parse_recurrence_days(item.get("recurrence_days"))
+    if recurrence_type == "weekly" and recurrence_days:
+        rule = f"RRULE:FREQ=WEEKLY;BYDAY={','.join(recurrence_days)}"
+        until = _format_recurrence_until(item.get("recurrence_until"))
+        if until:
+            rule = f"{rule};UNTIL={until}"
+        event["recurrence"] = [rule]
+
+    return event
 
 
 def _google_calendar_request(method, path, access_token, payload=None, params=None):
@@ -425,10 +503,22 @@ def sync_google_calendar_item(user_id, item_id):
             _ensure_google_calendar_tables(cursor)
             access_token, token_record = _get_valid_access_token(cursor, conn, user_id)
 
+            _ensure_dieta_treino_schedule_columns(cursor)
             user_column = _resolve_dieta_user_column(cursor)
             cursor.execute(
                 f"""
-                SELECT id, tipo, title, description, time, created_at, updated_at
+                SELECT
+                    id,
+                    tipo,
+                    title,
+                    description,
+                    time,
+                    created_at,
+                    updated_at,
+                    duration_minutes,
+                    recurrence_type,
+                    recurrence_days,
+                    DATE_FORMAT(recurrence_until, '%Y-%m-%d') AS recurrence_until
                 FROM dieta_treino
                 WHERE id=%s AND {user_column}=%s
                 """,

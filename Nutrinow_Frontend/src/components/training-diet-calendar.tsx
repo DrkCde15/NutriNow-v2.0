@@ -1,14 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Dumbbell, Salad } from "lucide-react";
+import { ChevronLeft, ChevronRight, Dumbbell, Pencil, Salad, Trash2 } from "lucide-react";
 
 export type CalendarItemType = "treino" | "dieta";
 
 export interface CalendarItem {
   id: number | string;
+  planId?: number;
   type: CalendarItemType;
   startsAt: string;
   title: string;
   description?: string;
+  time?: string | null;
+  scheduleDate?: string;
+  durationMinutes?: number;
+  isRecurring?: boolean;
+  recurrenceType?: "none" | "weekly" | null;
+  recurrenceDays?: string | null;
+  recurrenceUntil?: string | null;
 }
 
 interface LoadEventsParams {
@@ -19,6 +27,9 @@ interface LoadEventsParams {
 interface TrainingDietCalendarProps {
   loadEvents: (params: LoadEventsParams) => Promise<CalendarItem[]>;
   initialDate?: Date;
+  onEditItem?: (item: CalendarItem) => void;
+  onDeleteItem?: (item: CalendarItem) => void;
+  busyItemId?: number | null;
 }
 
 const weekDays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
@@ -45,9 +56,22 @@ function getTimeLabel(value: string) {
   }).format(new Date(value));
 }
 
+function getDurationLabel(minutes?: number) {
+  if (!minutes) return "";
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  if (hours && remainingMinutes) return `${hours}h${`${remainingMinutes}`.padStart(2, "0")}`;
+  if (hours) return `${hours}h`;
+  return `${remainingMinutes}min`;
+}
+
 export function TrainingDietCalendar({
   loadEvents,
   initialDate = new Date(),
+  onEditItem,
+  onDeleteItem,
+  busyItemId,
 }: TrainingDietCalendarProps) {
   const [currentDate, setCurrentDate] = useState(
     new Date(initialDate.getFullYear(), initialDate.getMonth(), 1),
@@ -214,26 +238,58 @@ export function TrainingDietCalendar({
                             : "border-emerald-200 bg-emerald-50 text-emerald-950"
                         }`}
                       >
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`inline-flex h-6 w-6 items-center justify-center rounded-full ${
-                              isWorkout
-                                ? "bg-sky-100 text-sky-700"
-                                : "bg-emerald-100 text-emerald-700"
-                            }`}
-                          >
-                            {isWorkout ? (
-                              <Dumbbell className="h-3.5 w-3.5" />
-                            ) : (
-                              <Salad className="h-3.5 w-3.5" />
-                            )}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="font-semibold">{item.title}</p>
-                            <p className="text-[11px] opacity-75">
-                              {isWorkout ? "Treino" : "Dieta"} • {getTimeLabel(item.startsAt)}
-                            </p>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span
+                              className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+                                isWorkout
+                                  ? "bg-sky-100 text-sky-700"
+                                  : "bg-emerald-100 text-emerald-700"
+                              }`}
+                            >
+                              {isWorkout ? (
+                                <Dumbbell className="h-3.5 w-3.5" />
+                              ) : (
+                                <Salad className="h-3.5 w-3.5" />
+                              )}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="font-semibold">{item.title}</p>
+                              <p className="text-[11px] opacity-75">
+                                {isWorkout ? "Treino" : "Dieta"} • {getTimeLabel(item.startsAt)}
+                                {item.durationMinutes ? ` • ${getDurationLabel(item.durationMinutes)}` : ""}
+                                {item.isRecurring ? " • Semanal" : ""}
+                              </p>
+                            </div>
                           </div>
+
+                          {(onEditItem || onDeleteItem) && (
+                            <div className="flex shrink-0 items-center gap-1">
+                              {onEditItem && (
+                                <button
+                                  type="button"
+                                  onClick={() => onEditItem(item)}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-white/70 text-current opacity-80 transition-smooth hover:opacity-100"
+                                  aria-label="Editar item"
+                                  title="Editar"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                              {onDeleteItem && (
+                                <button
+                                  type="button"
+                                  onClick={() => onDeleteItem(item)}
+                                  disabled={busyItemId === item.planId}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-white/70 text-current opacity-80 transition-smooth hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                  aria-label="Excluir item"
+                                  title="Excluir"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         {item.description && (

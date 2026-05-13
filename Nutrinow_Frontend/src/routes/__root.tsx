@@ -1,6 +1,7 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
+import logoIcon from "@/assets/logo.png";
 import { AuthProvider } from "@/lib/auth";
 
 function NotFoundComponent() {
@@ -40,6 +41,15 @@ export const Route = createRootRoute({
       { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
+      {
+        rel: "icon",
+        type: "image/png",
+        href: logoIcon,
+      },
+      {
+        rel: "apple-touch-icon",
+        href: logoIcon,
+      },
       {
         rel: "stylesheet",
         href: appCss,
