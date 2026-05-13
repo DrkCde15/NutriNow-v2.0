@@ -43,6 +43,7 @@ O NutriNow reduz essa friccao com orientacao continua, historico e contexto pess
 - 📧 Recuperacao de senha por e-mail.
 - 👤 Perfil com meta, peso, altura e historico.
 - 🥗 CRUD de dieta e treino.
+- Google Calendar: conexao OAuth e sincronizacao automatica dos itens de dieta/treino.
 - 🤖 Chat com NutriAI (texto) com memoria no MySQL.
 - 📸 Endpoint de analise de imagem disponivel (agente atual em modo texto).
 
@@ -122,9 +123,16 @@ GROQ_MAX_RETRIES=5
 GROQ_TEMPERATURE=0.7
 CLIENT_ID=seu_google_client_id
 SECRET_KEY_CLIENT=seu_google_client_secret
+GOOGLE_CALENDAR_REDIRECT_URI=http://127.0.0.1:8000/calendar/google/callback
+GOOGLE_CALENDAR_TIMEZONE=America/Sao_Paulo
+GOOGLE_CALENDAR_EVENT_DURATION_MINUTES=60
 EMAIL_SENDER=seu_email@gmail.com
 EMAIL_PASSWORD=sua_senha_de_app
 ```
+
+No Google Cloud Console, ative a Google Calendar API e adicione a URI acima em
+**Authorized redirect URIs** do cliente OAuth. A integracao usa o escopo
+`https://www.googleapis.com/auth/calendar.events`.
 
 ### 🎨 Frontend
 

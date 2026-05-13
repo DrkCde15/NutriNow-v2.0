@@ -9,6 +9,7 @@ from app.routes.chatbot import chatbot_bp
 from app.routes.profile import profile_bp
 from app.routes.fitness import fitness_bp
 from app.routes.feedbacks import feedback_bp
+from app.routes.calendar import google_calendar_bp
 
 def _build_allowed_origins():
     defaults = [
@@ -64,6 +65,7 @@ def create_app():
     app.register_blueprint(profile_bp)
     app.register_blueprint(fitness_bp)
     app.register_blueprint(feedback_bp)
+    app.register_blueprint(google_calendar_bp)
 
     @app.route("/health", methods=["GET"])
     def health():

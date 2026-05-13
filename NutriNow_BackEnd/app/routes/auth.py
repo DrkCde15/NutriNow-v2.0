@@ -18,7 +18,21 @@ auth_bp = Blueprint('auth', __name__)
 
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("SECRET_KEY_CLIENT")
-client = WebApplicationClient(client_id=CLIENT_ID)
+
+
+def get_google_client_config():
+    client_id = os.getenv("GOOGLE_CLIENT_ID") or os.getenv("CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET") or os.getenv("SECRET_KEY_CLIENT")
+
+    if not client_id or not client_secret:
+        raise Exception("Credenciais OAuth do Google nao configuradas")
+
+    return client_id, client_secret
+
+
+def create_google_oauth_client():
+    client_id, client_secret = get_google_client_config()
+    return WebApplicationClient(client_id=client_id), client_id, client_secret
 
 @dataclass
 class GoogleHosts:
@@ -114,6 +128,7 @@ def login():
 
 @auth_bp.route("/auth/login", methods=["GET"])
 def google_login():
+    client, _, _ = create_google_oauth_client()
     hosts = get_google_oauth_hosts()
     
     # Determinar a origem (frontend local ou cloudflare)
@@ -136,6 +151,7 @@ def google_callback():
         return redirect(f"{os.getenv('FRONTEND_URL')}/login?error=missing_code")
 
     try:
+        client, client_id, client_secret = create_google_oauth_client()
         hosts = get_google_oauth_hosts()
         token_url, headers, body = client.prepare_token_request(
             token_url=hosts.token_endpoint,
@@ -148,7 +164,7 @@ def google_callback():
             token_url,
             headers=headers,
             data=body,
-            auth=(CLIENT_ID, CLIENT_SECRET),
+            auth=(client_id, client_secret),
         )
 
         client.parse_request_body_response(json.dumps(token_response.json()))

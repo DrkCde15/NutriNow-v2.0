@@ -3,9 +3,26 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
 from app.database import get_db, get_db_connection
+from app.routes.calendar import delete_google_calendar_item, sync_google_calendar_item
 
 logger = logging.getLogger(__name__)
 fitness_bp = Blueprint('fitness', __name__)
+
+
+def _parse_scheduled_at(data):
+    date_value = str(data.get("date") or data.get("created_at") or data.get("startsAt") or "").strip()
+    if not date_value:
+        return None
+
+    scheduled_at = datetime.strptime(date_value[:10], "%Y-%m-%d")
+    time_value = str(data.get("time") or "").strip()
+
+    if len(time_value) == 5 and time_value[2] == ":":
+        hours, minutes = [int(part) for part in time_value.split(":")]
+        scheduled_at = scheduled_at.replace(hour=hours, minute=minutes)
+
+    return scheduled_at
+
 
 @fitness_bp.route('/dieta-treino', methods=['GET'])
 @jwt_required()
@@ -37,6 +54,7 @@ def add_item():
     description = data.get('description')
     time = data.get('time')
     aba = str(data.get('tipo', '')).lower()
+    scheduled_at = _parse_scheduled_at(data)
 
     if not all([title, description, aba]):
         return jsonify({"error": "Campos obrigatórios ausentes"}), 400
@@ -44,12 +62,25 @@ def add_item():
     tipo = 'treino' if 'treino' in aba else 'dieta'
     try:
         with get_db() as (cursor, conn):
-            cursor.execute("""
-                INSERT INTO dieta_treino (user_id, tipo, title, description, time)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (user_id, tipo, title, description, time))
+            if scheduled_at:
+                cursor.execute("""
+                    INSERT INTO dieta_treino (user_id, tipo, title, description, time, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (user_id, tipo, title, description, time, scheduled_at, scheduled_at))
+            else:
+                cursor.execute("""
+                    INSERT INTO dieta_treino (user_id, tipo, title, description, time)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (user_id, tipo, title, description, time))
+            item_id = cursor.lastrowid
             conn.commit()
-            return jsonify({"success": True, "message": "Item adicionado com sucesso!"}), 201
+
+        calendar_sync = sync_google_calendar_item(user_id, item_id)
+        return jsonify({
+            "success": True,
+            "message": "Item adicionado com sucesso!",
+            "googleCalendar": calendar_sync,
+        }), 201
     except Exception as e:
         logger.error(f"Erro ao adicionar item: {e}")
         return jsonify({"error": "Falha ao adicionar item"}), 500
@@ -61,21 +92,35 @@ def update_item(item_id):
     data = request.get_json()
     title = data.get('title'); description = data.get('description'); time = data.get('time')
     aba = str(data.get('tipo', '')).lower()
+    scheduled_at = _parse_scheduled_at(data)
     if not all([title, description, aba]):
         return jsonify({"error": "Campos obrigatórios ausentes"}), 400
 
     tipo = 'treino' if 'treino' in aba else 'dieta'
     try:
         with get_db() as (cursor, conn):
-            cursor.execute("""
-                UPDATE dieta_treino
-                SET title=%s, description=%s, time=%s, tipo=%s, updated_at=%s
-                WHERE id=%s AND user_id=%s
-            """, (title, description, time, tipo, datetime.now(), item_id, user_id))
+            if scheduled_at:
+                cursor.execute("""
+                    UPDATE dieta_treino
+                    SET title=%s, description=%s, time=%s, tipo=%s, created_at=%s, updated_at=%s
+                    WHERE id=%s AND user_id=%s
+                """, (title, description, time, tipo, scheduled_at, datetime.now(), item_id, user_id))
+            else:
+                cursor.execute("""
+                    UPDATE dieta_treino
+                    SET title=%s, description=%s, time=%s, tipo=%s, updated_at=%s
+                    WHERE id=%s AND user_id=%s
+                """, (title, description, time, tipo, datetime.now(), item_id, user_id))
+            updated = cursor.rowcount
             conn.commit()
-            if cursor.rowcount == 0:
+            if updated == 0:
                 return jsonify({"error": "Item não encontrado"}), 404
-            return jsonify({"success": True, "message": "Item atualizado com sucesso!"}), 200
+        calendar_sync = sync_google_calendar_item(user_id, item_id)
+        return jsonify({
+            "success": True,
+            "message": "Item atualizado com sucesso!",
+            "googleCalendar": calendar_sync,
+        }), 200
     except Exception as e:
         logger.error(f"Erro ao atualizar item: {e}")
         return jsonify({"error": "Falha ao atualizar item"}), 500
@@ -87,7 +132,16 @@ def delete_item(item_id):
     try:
         with get_db() as (cursor, conn):
             cursor.execute("DELETE FROM dieta_treino WHERE id = %s AND user_id = %s", (item_id, user_id))
+            deleted = cursor.rowcount
             conn.commit()
-            return jsonify({"success": True, "message": "Item excluído com sucesso!"}), 200
+        if deleted == 0:
+            return jsonify({"error": "Item nao encontrado"}), 404
+
+        calendar_delete = delete_google_calendar_item(user_id, item_id)
+        return jsonify({
+            "success": True,
+            "message": "Item excluido com sucesso!",
+            "googleCalendar": calendar_delete,
+        }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -7,6 +7,8 @@ select * from uploads;
 select * from chat_history;
 select * from redefinicao_senha;
 select * from dieta_treino;
+select * from google_calendar_tokens;
+select * from google_calendar_events;
 
 USE nutrinow2;
 
@@ -93,6 +95,33 @@ CREATE TABLE IF NOT EXISTS feedbacks (
     INDEX idx_feedbacks_created (created_at),
     CONSTRAINT fk_feedbacks_user FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE SET NULL,
     CONSTRAINT chk_feedbacks_rating CHECK (rating BETWEEN 1 AND 5)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Tabelas da integracao com Google Calendar
+CREATE TABLE IF NOT EXISTS google_calendar_tokens (
+    user_id INT PRIMARY KEY,
+    access_token TEXT NOT NULL,
+    refresh_token TEXT NULL,
+    token_type VARCHAR(40) DEFAULT 'Bearer',
+    scope TEXT NULL,
+    expires_at DATETIME NULL,
+    calendar_id VARCHAR(255) NOT NULL DEFAULT 'primary',
+    connected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_google_calendar_tokens_user FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS google_calendar_events (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    dieta_treino_id BIGINT NOT NULL,
+    tipo ENUM('treino', 'dieta') NOT NULL,
+    google_event_id VARCHAR(255) NOT NULL,
+    synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_google_calendar_event_item (user_id, dieta_treino_id, tipo),
+    INDEX idx_google_calendar_events_user (user_id),
+    CONSTRAINT fk_google_calendar_events_user FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 delete from chat_history WHERE id > 0;
