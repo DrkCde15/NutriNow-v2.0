@@ -26,3 +26,7 @@ def clear_user_agents(user_id):
         keys_to_del = [k for k in agent_cache if k.startswith(f"{user_id}_")]
         for k in keys_to_del:
             agent_cache.pop(k, None)
+
+def clear_session_agent(user_id, session_id):
+    if user_id and session_id:
+        agent_cache.pop(f"{user_id}_{session_id}", None)
