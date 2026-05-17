@@ -386,4 +386,5 @@ def delete_item(item_id):
             200,
         )
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Erro ao excluir item: {e}")
+        return jsonify({"error": "Falha ao excluir item"}), 500

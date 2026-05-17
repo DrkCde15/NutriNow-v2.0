@@ -2,12 +2,12 @@ import { useState, type FormEvent } from "react";
 import { createFileRoute, Link, useNavigate, redirect } from "@tanstack/react-router";
 import { Mail, Lock, User, UserPlus, AlertCircle, Check } from "lucide-react";
 import { AuthShell, Field, inputClass, primaryButtonClass } from "@/components/auth-shell";
-import { AUTH_STORAGE_KEY, useAuth } from "@/lib/auth";
+import { getStoredSession, useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/api";
 
 export const Route = createFileRoute("/cadastro")({
   beforeLoad: () => {
-    if (typeof window !== "undefined" && localStorage.getItem(AUTH_STORAGE_KEY)) {
+    if (typeof window !== "undefined" && getStoredSession()) {
       throw redirect({ to: "/" });
     }
   },
@@ -36,7 +36,7 @@ function CadastroPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const senhaForte = senha.length >= 6;
+  const senhaForte = senha.length >= 10;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -136,7 +136,7 @@ function CadastroPage() {
           icon={<Lock className="h-4 w-4" />}
           hint={
             <span className={`inline-flex items-center gap-1 ${senhaForte ? "text-primary" : ""}`}>
-              <Check className="h-3 w-3" /> Minimo de 6 caracteres
+              <Check className="h-3 w-3" /> Minimo de 10 caracteres
             </span>
           }
         >

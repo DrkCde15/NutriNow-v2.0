@@ -32,7 +32,7 @@ function ResetSenhaPage() {
     setError("");
 
     if (!tokenFromUrl) return setError("Token invalido ou ausente.");
-    if (senha.length < 6) return setError("Senha deve ter ao menos 6 caracteres");
+    if (senha.length < 10) return setError("Senha deve ter ao menos 10 caracteres");
     if (senha !== confirmar) return setError("As senhas nao coincidem");
 
     setLoading(true);

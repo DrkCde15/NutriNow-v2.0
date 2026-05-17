@@ -3,20 +3,22 @@ import os
 import re
 import unicodedata
 import uuid
+from pathlib import Path
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.database import get_db
+from app.security import check_rate_limit, rate_limit_response
 from app.services.agent_service import clear_session_agent, get_agent
 
 logger = logging.getLogger(__name__)
 chatbot_bp = Blueprint("chatbot", __name__)
 
-UPLOAD_FOLDER = r"C:\Users\Júlio César\Pictures\Uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
 SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+CHAT_MESSAGE_MAX_CHARS = int(os.getenv("CHAT_MESSAGE_MAX_CHARS", "8000"))
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+ALLOWED_IMAGE_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
 GENERIC_CHAT_TOKENS = {
     "oi",
     "ola",
@@ -67,6 +69,44 @@ def _truncate_text(value, limit=80):
 
 def _serialize_timestamp(value):
     return value.isoformat() if hasattr(value, "isoformat") else value
+
+
+def _upload_folder():
+    folder = Path(current_app.config.get("UPLOAD_FOLDER") or os.getenv("UPLOAD_FOLDER") or "uploads")
+    folder = folder.resolve()
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+def _detect_image_extension(header):
+    if header.startswith(b"\xff\xd8\xff"):
+        return ".jpg"
+    if header.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ".png"
+    if header.startswith(b"RIFF") and header[8:12] == b"WEBP":
+        return ".webp"
+    return None
+
+
+def _validated_image_extension(file):
+    original_ext = os.path.splitext(file.filename or "")[1].lower()
+    if original_ext not in ALLOWED_IMAGE_EXTENSIONS:
+        return None
+
+    mimetype = (file.mimetype or "").lower()
+    if mimetype and mimetype not in ALLOWED_IMAGE_MIME_TYPES:
+        return None
+
+    header = file.stream.read(32)
+    file.stream.seek(0)
+    detected_ext = _detect_image_extension(header)
+    if not detected_ext:
+        return None
+    if original_ext in {".jpg", ".jpeg"} and detected_ext == ".jpg":
+        return ".jpg"
+    if original_ext == detected_ext:
+        return detected_ext
+    return None
 
 
 def _get_user_email(user_id):
@@ -148,6 +188,11 @@ def chat():
     user_id = get_jwt_identity()
     email = _get_user_email(user_id)
     data = request.get_json(silent=True) or {}
+
+    allowed, retry_after = check_rate_limit("chat", 60, 60, user_id)
+    if not allowed:
+        return rate_limit_response(retry_after)
+
     session_id = _normalize_session_id(
         request.headers.get("X-Session-ID") or data.get("session_id"),
         create_if_missing=True,
@@ -155,9 +200,12 @@ def chat():
     if not session_id:
         return jsonify({"error": "Sessao invalida"}), 400
 
-    message = data.get("message")
+    message = str(data.get("message") or "").strip()
     if not message:
         return jsonify({"error": "Mensagem vazia"}), 400
+    message_limit = int(current_app.config.get("CHAT_MESSAGE_MAX_CHARS", CHAT_MESSAGE_MAX_CHARS))
+    if len(message) > message_limit:
+        return jsonify({"error": "Mensagem muito longa"}), 413
 
     agent = get_agent(session_id=session_id, user_id=user_id, email=email)
     response_text = agent.run_text(message)
@@ -205,7 +253,7 @@ def chat_sessions():
         return jsonify({"success": True, "sessions": sessions}), 200
     except Exception as e:
         logger.exception("Erro ao listar sessoes de chat")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Falha ao listar sessoes de chat"}), 500
 
 
 @chatbot_bp.route("/chat_sessions/<session_id>", methods=["DELETE"])
@@ -231,7 +279,7 @@ def delete_chat_session(session_id):
         return jsonify({"success": True, "deleted": deleted}), 200
     except Exception as e:
         logger.exception("Erro ao excluir sessao de chat")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Falha ao excluir sessao de chat"}), 500
 
 
 @chatbot_bp.route("/analyze_image", methods=["POST", "OPTIONS"])
@@ -243,6 +291,10 @@ def analyze_image():
     try:
         user_id = get_jwt_identity()
         email = _get_user_email(user_id)
+
+        allowed, retry_after = check_rate_limit("image_upload", 20, 3600, user_id)
+        if not allowed:
+            return rate_limit_response(retry_after)
 
         session_id = _normalize_session_id(
             request.headers.get("X-Session-ID") or request.form.get("session_id"),
@@ -257,31 +309,38 @@ def analyze_image():
         if file.filename == "":
             return jsonify({"error": "Nenhum arquivo selecionado"}), 400
 
+        detected_ext = _validated_image_extension(file)
+        if not detected_ext:
+            return jsonify({"error": "Arquivo de imagem invalido"}), 400
+
         message_type = request.form.get("message_type", "human")
-        file_ext = os.path.splitext(file.filename)[1]
-        filename = f"{uuid.uuid4()}{file_ext}"
-        file_path = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(file_path)
+        if message_type not in {"human", "ai"}:
+            message_type = "human"
+
+        filename = f"{uuid.uuid4()}{detected_ext}"
+        file_path = _upload_folder() / filename
+        file.save(str(file_path))
 
         with get_db() as (cursor, conn):
             cursor.execute(
                 "INSERT INTO uploads (user_id, file_path, uploaded_at, message_type) VALUES (%s, %s, NOW(), %s)",
-                (user_id, file_path, message_type),
+                (user_id, filename, message_type),
             )
+            upload_id = cursor.lastrowid
             conn.commit()
 
         agent = get_agent(session_id=session_id, user_id=user_id, email=email)
-        analysis_result = agent.run_image(file_path)
+        analysis_result = agent.run_image(str(file_path))
         agent._save_message("human", f"Imagem enviada: {file.filename}")
         agent._save_message("ai", analysis_result)
 
         return jsonify({
             "success": True,
             "session_id": session_id,
-            "file_path": file_path,
+            "upload_id": upload_id,
             "message_type": message_type,
             "response": analysis_result,
         }), 200
     except Exception as e:
         logger.exception("Erro no endpoint /analyze_image")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Falha ao analisar imagem"}), 500

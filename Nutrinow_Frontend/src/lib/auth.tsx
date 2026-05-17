@@ -64,10 +64,16 @@ function normalizeUser(input: { id: number | string; nome: string; email: string
 export function getStoredSession(): StoredSession | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    const raw = sessionStorage.getItem(AUTH_STORAGE_KEY) ?? localStorage.getItem(AUTH_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredSession;
     if (!parsed?.token || !parsed?.user) return null;
+
+    if (!sessionStorage.getItem(AUTH_STORAGE_KEY)) {
+      sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(parsed));
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
+
     return parsed;
   } catch {
     return null;
@@ -90,9 +96,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (typeof window === "undefined") return;
     if (next) {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(next));
+      sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(next));
+      localStorage.removeItem(AUTH_STORAGE_KEY);
       return;
     }
+    sessionStorage.removeItem(AUTH_STORAGE_KEY);
     localStorage.removeItem(AUTH_STORAGE_KEY);
     localStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
   };
@@ -101,17 +109,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const hydrate = async () => {
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
-        const accessToken = params.get("access_token");
-        const userId = params.get("user_id");
-        const userName = params.get("user_name");
-        const userEmail = params.get("user_email");
+        const authCode = params.get("auth_code");
 
-        if (accessToken && userId && userName && userEmail) {
-          persist({
-            token: accessToken,
-            user: { id: userId, nome: userName, email: userEmail },
-          });
+        if (authCode) {
           window.history.replaceState({}, document.title, window.location.pathname);
+          try {
+            const response = await apiRequest<LoginResponse>("/auth/exchange-code", {
+              method: "POST",
+              body: JSON.stringify({ code: authCode }),
+            });
+            persist({
+              token: response.access_token,
+              user: normalizeUser(response.user),
+            });
+          } catch {
+            persist(null);
+          }
           setLoading(false);
           return;
         }
@@ -156,7 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!payload.nome || !payload.sobrenome || !payload.data_nascimento || !payload.genero || !payload.email || !payload.senha) {
       throw new Error("Preencha todos os campos obrigatorios");
     }
-    if (payload.senha.length < 6) throw new Error("Senha deve ter ao menos 6 caracteres");
+    if (payload.senha.length < 10) throw new Error("Senha deve ter ao menos 10 caracteres");
 
     await apiRequest<{ message: string }>("/cadastro", {
       method: "POST",
@@ -172,7 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const next = { ...prev, ...patch };
 
       if (typeof window !== "undefined" && token) {
-        localStorage.setItem(
+        sessionStorage.setItem(
           AUTH_STORAGE_KEY,
           JSON.stringify({
             token,

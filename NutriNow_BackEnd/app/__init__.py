@@ -1,61 +1,69 @@
 import os
+import logging
 from datetime import timedelta
 from dotenv import load_dotenv
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
+from werkzeug.exceptions import RequestEntityTooLarge
 from app.routes.auth import auth_bp
 from app.routes.chatbot import chatbot_bp
 from app.routes.profile import profile_bp
 from app.routes.fitness import fitness_bp
 from app.routes.feedbacks import feedback_bp
 from app.routes.calendar import google_calendar_bp
+from app.security import build_allowed_origins, env_flag, is_development
 
-def _build_allowed_origins():
-    defaults = [
-        "https://nutrinow-app.jcesarsantana215.workers.dev",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:4200",
-        "http://127.0.0.1:4200",
-        "http://localhost:8080",
-        "http://127.0.0.1:8080",
-    ]
+logger = logging.getLogger(__name__)
 
-    configured = os.getenv("CORS_ORIGINS", "")
-    if configured:
-        for origin in configured.split(","):
-            origin = origin.strip()
-            if origin and origin not in defaults:
-                defaults.append(origin)
 
-    single_origin = os.getenv("CORS_ORIGIN", "").strip()
-    if single_origin and single_origin not in defaults:
-        defaults.append(single_origin)
+def _secret_or_dev_fallback(name, fallback=None):
+    value = os.getenv(name) or fallback
+    if value:
+        if not is_development() and len(value) < 32:
+            raise RuntimeError(f"{name} deve ter pelo menos 32 caracteres em producao")
+        return value
 
-    return defaults
+    if not is_development():
+        raise RuntimeError(f"{name} precisa estar configurado em producao")
+
+    logger.warning("%s nao configurado; usando segredo temporario somente para desenvolvimento", name)
+    return f"dev-only-{name.lower()}-change-me-32-chars"
 
 
 def create_app():
     load_dotenv()
     app = Flask(__name__)
 
-    app.secret_key = os.getenv("FLASK_SECRET_KEY")
-    os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+    app.secret_key = _secret_or_dev_fallback("FLASK_SECRET_KEY")
+
+    if is_development():
+        os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
+    else:
+        os.environ.pop("OAUTHLIB_INSECURE_TRANSPORT", None)
+
+    jwt_secret = _secret_or_dev_fallback("JWT_SECRET_KEY", app.secret_key)
+    jwt_minutes = int(os.getenv("JWT_ACCESS_TOKEN_MINUTES", "60"))
+    max_upload_mb = int(os.getenv("MAX_UPLOAD_MB", "5"))
+    upload_folder = os.getenv("UPLOAD_FOLDER", os.path.join(os.getcwd(), "uploads"))
+    chat_message_max_chars = int(os.getenv("CHAT_MESSAGE_MAX_CHARS", "8000"))
 
     app.config.update(
-        JWT_SECRET_KEY=os.getenv("JWT_SECRET_KEY"),
-        JWT_ACCESS_TOKEN_EXPIRES=timedelta(days=30),
+        JWT_SECRET_KEY=jwt_secret,
+        JWT_ACCESS_TOKEN_EXPIRES=timedelta(minutes=jwt_minutes),
+        MAX_CONTENT_LENGTH=max_upload_mb * 1024 * 1024,
+        UPLOAD_FOLDER=upload_folder,
+        CHAT_MESSAGE_MAX_CHARS=chat_message_max_chars,
     )
 
     JWTManager(app)
 
-    allowed_origins = _build_allowed_origins()
+    allowed_origins = build_allowed_origins()
 
     CORS(
         app,
         origins=allowed_origins,
-        supports_credentials=True,
+        supports_credentials=env_flag("CORS_SUPPORTS_CREDENTIALS", False),
         allow_headers=["Content-Type", "Authorization", "X-Session-ID"],
         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     )
@@ -70,5 +78,19 @@ def create_app():
     @app.route("/health", methods=["GET"])
     def health():
         return jsonify({"status": "ok"})
+
+    @app.errorhandler(RequestEntityTooLarge)
+    def request_entity_too_large(_error):
+        return jsonify({"error": "Arquivo excede o limite permitido"}), 413
+
+    @app.after_request
+    def add_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+        if not is_development():
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        return response
 
     return app

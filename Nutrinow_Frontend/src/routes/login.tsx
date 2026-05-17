@@ -2,12 +2,12 @@ import { useState, type FormEvent } from "react";
 import { createFileRoute, Link, useNavigate, redirect } from "@tanstack/react-router";
 import { Mail, Lock, LogIn, AlertCircle } from "lucide-react";
 import { AuthShell, Field, inputClass, primaryButtonClass } from "@/components/auth-shell";
-import { AUTH_STORAGE_KEY, useAuth } from "@/lib/auth";
+import { getStoredSession, useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/api";
 
 export const Route = createFileRoute("/login")({
   beforeLoad: () => {
-    if (typeof window !== "undefined" && localStorage.getItem(AUTH_STORAGE_KEY)) {
+    if (typeof window !== "undefined" && getStoredSession()) {
       throw redirect({ to: "/" });
     }
   },

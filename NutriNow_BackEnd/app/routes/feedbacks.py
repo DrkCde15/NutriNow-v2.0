@@ -5,6 +5,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
 
 from app.database import get_db
+from app.security import check_rate_limit, rate_limit_response
 from app.services.mail_service import envoyer_email
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ CREATE TABLE IF NOT EXISTS feedbacks (
 
 
 def _notify_feedback_email(feedback_id, author_name, author_email, rating, message):
-    recipient = os.getenv("EMAIL_SENDER").strip()
+    recipient = (os.getenv("EMAIL_SENDER") or "").strip()
     if not recipient:
         logger.error("Destino de notificacao de feedback nao configurado")
         return False
@@ -61,6 +62,10 @@ def create_feedback():
     data = request.get_json(silent=True) or {}
     message = " ".join(str(data.get("message", "")).strip().split())
     name = " ".join(str(data.get("name", "")).strip().split())
+
+    allowed, retry_after = check_rate_limit("feedback", 10, 3600)
+    if not allowed:
+        return rate_limit_response(retry_after)
 
     try:
         rating = int(data.get("rating"))
@@ -107,11 +112,10 @@ def create_feedback():
                 (user_id, author_name, user_email, rating, message),
             )
             feedback_id = cursor.lastrowid
-            if not _notify_feedback_email(feedback_id, author_name, user_email, rating, message):
-                conn.rollback()
-                return jsonify({"error": "Falha ao enviar email de notificacao do feedback"}), 500
-
             conn.commit()
+
+            if not _notify_feedback_email(feedback_id, author_name, user_email, rating, message):
+                logger.error("Feedback %s salvo, mas a notificacao por email falhou", feedback_id)
 
             return (
                 jsonify(

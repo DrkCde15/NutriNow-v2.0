@@ -229,7 +229,7 @@ def get_perfil():
             )
     except Exception as e:
         logger.error(f"Erro ao buscar perfil: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Falha ao buscar perfil"}), 500
 
 
 @profile_bp.route("/perfil", methods=["POST"])
@@ -313,7 +313,7 @@ def update_perfil():
             return jsonify({"success": True, "message": "Perfil atualizado com sucesso!"}), 200
     except Exception as e:
         logger.error(f"Erro ao atualizar perfil: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Falha ao atualizar perfil"}), 500
 
 
 @profile_bp.route("/perfil", methods=["DELETE"])
@@ -328,7 +328,7 @@ def delete_perfil():
             return jsonify({"success": True, "message": "Conta e perfil excluidos com sucesso!"}), 200
     except Exception as e:
         logger.error(f"Erro ao excluir perfil: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Falha ao excluir perfil"}), 500
 
 
 @profile_bp.route("/dashboard", methods=["GET"])
@@ -430,4 +430,4 @@ def get_dashboard():
         )
     except Exception as e:
         logger.error(f"Erro ao buscar dashboard: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Falha ao buscar dashboard"}), 500
