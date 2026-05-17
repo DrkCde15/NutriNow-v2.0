@@ -10,3 +10,5 @@ Werkzeug
 ollama
 requests
 oauthlib
+gunicorn
+Flask-JWT-Extended
