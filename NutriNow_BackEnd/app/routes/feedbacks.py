@@ -10,6 +10,7 @@ from app.services.mail_service import envoyer_email
 
 logger = logging.getLogger(__name__)
 feedback_bp = Blueprint("feedback", __name__)
+_feedbacks_table_ready = False
 
 CREATE_FEEDBACKS_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS feedbacks (
@@ -54,6 +55,15 @@ def _notify_feedback_email(feedback_id, author_name, author_email, rating, messa
     return envoyer_email(recipient, subject, html_body)
 
 
+def _ensure_feedbacks_table(cursor):
+    global _feedbacks_table_ready
+    if _feedbacks_table_ready:
+        return
+
+    cursor.execute(CREATE_FEEDBACKS_TABLE_SQL)
+    _feedbacks_table_ready = True
+
+
 @feedback_bp.route("/feedbacks", methods=["POST", "OPTIONS"])
 def create_feedback():
     if request.method == "OPTIONS":
@@ -95,7 +105,7 @@ def create_feedback():
 
     try:
         with get_db() as (cursor, conn):
-            cursor.execute(CREATE_FEEDBACKS_TABLE_SQL)
+            _ensure_feedbacks_table(cursor)
             if user_id is not None:
                 cursor.execute("SELECT nome, email FROM usuarios WHERE id=%s", (user_id,))
                 user = cursor.fetchone() or {}

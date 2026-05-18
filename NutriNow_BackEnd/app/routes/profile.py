@@ -6,6 +6,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.database import get_db
 from app.services.account_cache import invalidate_cached_account
+from app.services.schema_cache import resolve_dieta_user_column
 
 logger = logging.getLogger(__name__)
 profile_bp = Blueprint("profile", __name__)
@@ -67,20 +68,7 @@ def _infer_insight_status(text, source_type=None):
 
 def _resolve_dieta_user_column(cursor):
     try:
-        cursor.execute(
-            """
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_schema = DATABASE()
-              AND table_name = 'dieta_treino'
-              AND column_name IN ('user_id', 'usuario_id')
-            """
-        )
-        columns = {row["column_name"] for row in cursor.fetchall()}
-        if "user_id" in columns:
-            return "user_id"
-        if "usuario_id" in columns:
-            return "usuario_id"
+        return resolve_dieta_user_column(cursor)
     except Exception as exc:
         logger.warning(f"Nao foi possivel detectar coluna de usuario em dieta_treino: {exc}")
     return "user_id"

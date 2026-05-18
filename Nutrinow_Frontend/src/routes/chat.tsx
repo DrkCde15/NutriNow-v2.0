@@ -625,7 +625,7 @@ function ChatTopBar({
         >
           <Menu className="h-5 w-5" />
         </button>
-        <Link to="/dashboard" className="flex items-center gap-3">
+        <Link to="/" className="flex items-center gap-3">
           <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-emerald-100">
             <img src={logo} alt="NutriNow" className="h-full w-full object-cover" />
           </span>

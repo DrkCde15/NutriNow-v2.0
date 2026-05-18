@@ -331,8 +331,10 @@ def analyze_image():
 
         agent = get_agent(session_id=session_id, user_id=user_id, email=email)
         analysis_result = agent.run_image(str(file_path))
-        agent._save_message("human", f"Imagem enviada: {file.filename}")
-        agent._save_message("ai", analysis_result)
+        agent._save_messages([
+            ("human", f"Imagem enviada: {file.filename}"),
+            ("ai", analysis_result),
+        ])
 
         return jsonify({
             "success": True,

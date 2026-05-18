@@ -6,6 +6,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.database import get_db, get_db_connection
 from app.routes.calendar import delete_google_calendar_item, sync_google_calendar_item
+from app.services.schema_cache import ensure_dieta_treino_schedule_columns
 
 logger = logging.getLogger(__name__)
 fitness_bp = Blueprint("fitness", __name__)
@@ -14,27 +15,7 @@ WEEKDAY_ORDER = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
 
 
 def _ensure_dieta_treino_schedule_columns(cursor):
-    cursor.execute(
-        """
-        SELECT column_name
-        FROM information_schema.columns
-        WHERE table_schema = DATABASE()
-          AND table_name = 'dieta_treino'
-        """
-    )
-    columns = {
-        row.get("column_name") or row.get("COLUMN_NAME")
-        for row in cursor.fetchall()
-    }
-
-    if "duration_minutes" not in columns:
-        cursor.execute("ALTER TABLE dieta_treino ADD COLUMN duration_minutes INT NOT NULL DEFAULT 60")
-    if "recurrence_type" not in columns:
-        cursor.execute("ALTER TABLE dieta_treino ADD COLUMN recurrence_type VARCHAR(20) NOT NULL DEFAULT 'none'")
-    if "recurrence_days" not in columns:
-        cursor.execute("ALTER TABLE dieta_treino ADD COLUMN recurrence_days VARCHAR(32) NULL")
-    if "recurrence_until" not in columns:
-        cursor.execute("ALTER TABLE dieta_treino ADD COLUMN recurrence_until DATE NULL")
+    ensure_dieta_treino_schedule_columns(cursor)
 
 
 def _parse_recurrence_days(value):

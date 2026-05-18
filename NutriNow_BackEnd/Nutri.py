@@ -8,6 +8,9 @@ from typing import List, Optional, Dict
 import mysql.connector
 import requests
 
+from app.database import get_db_connection
+from app.services.schema_cache import get_table_columns, resolve_dieta_user_column
+
 # Configuracao de Logging
 logger = logging.getLogger("NutriAgent")
 
@@ -52,6 +55,7 @@ class NutritionistAgent:
         self.session_id = session_id
         self.user_id = user_id
         self.email = email
+        self._uses_default_db = mysql_config is None
         self.db_config = mysql_config or {
             "host": os.getenv("MYSQL_HOST"),
             "user": os.getenv("MYSQL_USER"),
@@ -59,6 +63,8 @@ class NutritionistAgent:
             "database": os.getenv("MYSQL_DATABASE"),
             "port": int(os.getenv("MYSQL_PORT")),
         }
+        self._user_context_cache = {"expires_at": 0, "value": ""}
+        self._calendar_context_cache = {"expires_at": 0, "value": ""}
 
         # Groq only
         self.groq_api_key = os.getenv("GROQ_API_KEY")
@@ -177,6 +183,8 @@ class NutritionistAgent:
         raise last_exc if last_exc else RuntimeError("Falha ao gerar conteudo no Groq.")
 
     def _get_db_connection(self):
+        if self._uses_default_db:
+            return get_db_connection()
         return mysql.connector.connect(**self.db_config)
 
     @staticmethod
@@ -249,44 +257,20 @@ class NutritionistAgent:
 
     @staticmethod
     def _resolve_dieta_user_column(cursor) -> str:
-        cursor.execute(
-            """
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_schema = DATABASE()
-              AND table_name = 'dieta_treino'
-              AND column_name IN ('user_id', 'usuario_id')
-            """
-        )
-        columns = {
-            row.get("column_name") or row.get("COLUMN_NAME")
-            for row in cursor.fetchall()
-        }
-        if "user_id" in columns:
-            return "user_id"
-        if "usuario_id" in columns:
-            return "usuario_id"
-        return "user_id"
+        return resolve_dieta_user_column(cursor)
 
     @staticmethod
     def _get_dieta_treino_columns(cursor) -> set:
-        cursor.execute(
-            """
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_schema = DATABASE()
-              AND table_name = 'dieta_treino'
-            """
-        )
-        return {
-            row.get("column_name") or row.get("COLUMN_NAME")
-            for row in cursor.fetchall()
-        }
+        return get_table_columns(cursor, "dieta_treino")
 
     def _get_user_context(self) -> str:
         """Busca informacoes do perfil do usuario para injetar no prompt."""
         if not self.user_id:
             return ""
+
+        now = time.monotonic()
+        if self._user_context_cache["expires_at"] > now:
+            return self._user_context_cache["value"]
 
         try:
             conn = self._get_db_connection()
@@ -306,15 +290,21 @@ class NutritionistAgent:
                 contexto = f"\n\n[CONTEXTO DO USUARIO]: Meta: {perfil['meta']} | "
                 contexto += f"Altura: {perfil['altura']}m | Peso: {perfil['peso']}kg | "
                 contexto += f"Historico de Treino: {perfil['ja_treinou']}"
+                self._user_context_cache = {"expires_at": now + 60, "value": contexto}
                 return contexto
         except Exception as e:
             logger.error(f"Erro ao buscar contexto do usuario: {e}")
+        self._user_context_cache = {"expires_at": now + 30, "value": ""}
         return ""
 
     def _get_calendar_context(self, limit: int = 12) -> str:
         """Busca itens de dieta/treino agendados para injetar no prompt."""
         if not self.user_id:
             return ""
+
+        now = time.monotonic()
+        if self._calendar_context_cache["expires_at"] > now:
+            return self._calendar_context_cache["value"]
 
         try:
             conn = self._get_db_connection()
@@ -366,7 +356,9 @@ class NutritionistAgent:
             conn.close()
 
             if not items:
-                return "\n\n[CONTEXTO DA AGENDA DO USUARIO]: Nenhum treino ou dieta agendado no NutriNow."
+                contexto = "\n\n[CONTEXTO DA AGENDA DO USUARIO]: Nenhum treino ou dieta agendado no NutriNow."
+                self._calendar_context_cache = {"expires_at": now + 30, "value": contexto}
+                return contexto
 
             lines = []
             for item in items:
@@ -389,9 +381,12 @@ class NutritionistAgent:
                     parts.append(f"descricao: {description}")
                 lines.append(f"- {' | '.join(parts)}")
 
-            return "\n\n[CONTEXTO DA AGENDA DO USUARIO]:\n" + "\n".join(lines)
+            contexto = "\n\n[CONTEXTO DA AGENDA DO USUARIO]:\n" + "\n".join(lines)
+            self._calendar_context_cache = {"expires_at": now + 30, "value": contexto}
+            return contexto
         except Exception as e:
             logger.error(f"Erro ao buscar contexto da agenda: {e}")
+        self._calendar_context_cache = {"expires_at": now + 15, "value": ""}
         return ""
 
     def get_conversation_history(self, limit: int = 10, by_user: bool = False) -> List[Dict]:
@@ -436,19 +431,32 @@ class NutritionistAgent:
 
     def _save_message(self, message_type: str, content: str):
         """Salva mensagem no historico do MySQL."""
+        self._save_messages([(message_type, content)])
+
+    def _save_messages(self, messages):
+        """Salva uma ou mais mensagens no historico do MySQL."""
+        if not messages:
+            return
+
         try:
             conn = self._get_db_connection()
             cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO chat_history (session_id, user_id, email, message_type, content) VALUES (%s, %s, %s, %s, %s)",
-                (self.session_id, self.user_id, self.email, message_type, content),
+            cursor.executemany(
+                """
+                INSERT INTO chat_history (session_id, user_id, email, message_type, content)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                [
+                    (self.session_id, self.user_id, self.email, message_type, content)
+                    for message_type, content in messages
+                ],
             )
             conn.commit()
             cursor.close()
             conn.close()
-            logger.info(f"Mensagem salva no DB: {message_type}")
+            logger.info("Mensagens salvas no DB: %s", len(messages))
         except Exception as e:
-            logger.error(f"Erro ao salvar mensagem no banco: {e}")
+            logger.error(f"Erro ao salvar mensagens no banco: {e}")
 
     def run_text(self, text: str) -> str:
         """Processa uma mensagem de texto usando Groq."""
@@ -465,8 +473,7 @@ class NutritionistAgent:
 
             result = self._generate_with_retry(messages)
 
-            self._save_message("human", text)
-            self._save_message("ai", result)
+            self._save_messages([("human", text), ("ai", result)])
             return result
         except Exception as e:
             logger.error(f"Erro no NutriAgent: {e}")
