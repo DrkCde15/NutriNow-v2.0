@@ -6,6 +6,8 @@ export interface User {
   nome: string;
   email: string;
   avatar?: string;
+  altura?: number | null;
+  peso?: number | null;
 }
 
 interface AuthContextValue {
@@ -36,29 +38,49 @@ interface StoredSession {
   user: User;
 }
 
-interface LoginResponse {
-  access_token: string;
-  user: { id: number | string; nome: string; email: string };
-}
-
-interface MeResponse {
+interface AccountUserResponse {
   id: number | string;
   nome: string;
   email: string;
+  avatar?: string;
+  altura?: number | string | null;
+  peso?: number | string | null;
 }
+
+interface LoginResponse {
+  access_token: string;
+  user: AccountUserResponse;
+}
+
+type MeResponse = AccountUserResponse;
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export const AUTH_STORAGE_KEY = "nutrinow_auth_session";
 export const CHAT_SESSION_STORAGE_KEY = "nutrinow_chat_session_id";
+const REFRESH_CSRF_COOKIE = "csrf_refresh_token";
 
-function normalizeUser(input: { id: number | string; nome: string; email: string; avatar?: string }): User {
+function normalizeMeasurement(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : null;
+}
+
+function normalizeUser(input: AccountUserResponse): User {
   return {
     id: String(input.id),
     nome: input.nome,
     email: input.email,
     avatar: input.avatar,
+    altura: normalizeMeasurement(input.altura),
+    peso: normalizeMeasurement(input.peso),
   };
+}
+
+function hasRefreshSession() {
+  if (typeof document === "undefined") return false;
+  return document.cookie.split("; ").some((item) => item.startsWith(`${REFRESH_CSRF_COOKIE}=`));
 }
 
 export function getStoredSession(): StoredSession | null {
@@ -107,6 +129,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const hydrate = async () => {
+      const restoreFromRefresh = async () => {
+        if (!hasRefreshSession()) {
+          persist(null);
+          return false;
+        }
+
+        try {
+          const refreshed = await apiRequest<LoginResponse>("/refresh", { method: "POST" });
+          persist({
+            token: refreshed.access_token,
+            user: normalizeUser(refreshed.user),
+          });
+          return true;
+        } catch {
+          persist(null);
+          return false;
+        }
+      };
+
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
         const authCode = params.get("auth_code");
@@ -132,6 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const session = getStoredSession();
       if (!session) {
+        await restoreFromRefresh();
         setLoading(false);
         return;
       }
@@ -143,7 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           user: normalizeUser({ ...me, avatar: session.user.avatar }),
         });
       } catch {
-        persist(null);
+        await restoreFromRefresh();
       } finally {
         setLoading(false);
       }
@@ -201,7 +243,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     const currentToken = token;
     persist(null);
-    if (!currentToken) return;
 
     try {
       await apiRequest<{ message: string }>("/logout", {

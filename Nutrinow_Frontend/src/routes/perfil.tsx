@@ -100,7 +100,7 @@ function PerfilPage() {
           jaTreinou: data.ja_treinou ?? "Nunca treinou",
         });
         setInitialAvatar(user?.avatar);
-        updateUser({ nome: data.nome, email: data.email });
+        updateUser({ nome: data.nome, email: data.email, altura: data.altura, peso: data.peso });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Erro ao carregar perfil");
       } finally {
@@ -139,6 +139,9 @@ function PerfilPage() {
     setError("");
     setLoading(true);
     try {
+      const nextAltura = altura ? Number(altura) : null;
+      const nextPeso = peso ? Number(peso) : null;
+
       await apiRequest<{ success: boolean; message: string }>("/perfil", {
         method: "POST",
         token,
@@ -149,13 +152,19 @@ function PerfilPage() {
           email: email.trim(),
           dataNascimento,
           meta: meta.trim() || "Nao definida",
-          altura: altura ? Number(altura) : null,
-          peso: peso ? Number(peso) : null,
+          altura: nextAltura,
+          peso: nextPeso,
           ja_treinou: jaTreinou,
         }),
       });
 
-      updateUser({ nome: nome.trim() || user.nome, email: email.trim() || user.email, avatar });
+      updateUser({
+        nome: nome.trim() || user.nome,
+        email: email.trim() || user.email,
+        avatar,
+        altura: nextAltura,
+        peso: nextPeso,
+      });
       setInitialForm({
         nome,
         sobrenome,

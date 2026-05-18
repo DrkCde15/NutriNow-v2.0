@@ -44,6 +44,8 @@ def create_app():
 
     jwt_secret = _secret_or_dev_fallback("JWT_SECRET_KEY", app.secret_key)
     jwt_minutes = int(os.getenv("JWT_ACCESS_TOKEN_MINUTES", "60"))
+    jwt_refresh_days = int(os.getenv("JWT_REFRESH_TOKEN_DAYS", "30"))
+    jwt_cookie_samesite = os.getenv("JWT_COOKIE_SAMESITE") or ("Lax" if is_development() else "None")
     max_upload_mb = int(os.getenv("MAX_UPLOAD_MB", "5"))
     upload_folder = os.getenv("UPLOAD_FOLDER", os.path.join(os.getcwd(), "uploads"))
     chat_message_max_chars = int(os.getenv("CHAT_MESSAGE_MAX_CHARS", "8000"))
@@ -51,6 +53,13 @@ def create_app():
     app.config.update(
         JWT_SECRET_KEY=jwt_secret,
         JWT_ACCESS_TOKEN_EXPIRES=timedelta(minutes=jwt_minutes),
+        JWT_REFRESH_TOKEN_EXPIRES=timedelta(days=jwt_refresh_days),
+        JWT_TOKEN_LOCATION=["headers", "cookies"],
+        JWT_COOKIE_SECURE=env_flag("JWT_COOKIE_SECURE", not is_development()),
+        JWT_COOKIE_SAMESITE=jwt_cookie_samesite,
+        JWT_REFRESH_COOKIE_PATH="/refresh",
+        JWT_REFRESH_CSRF_COOKIE_PATH="/",
+        JWT_COOKIE_CSRF_PROTECT=True,
         MAX_CONTENT_LENGTH=max_upload_mb * 1024 * 1024,
         UPLOAD_FOLDER=upload_folder,
         CHAT_MESSAGE_MAX_CHARS=chat_message_max_chars,
@@ -63,8 +72,8 @@ def create_app():
     CORS(
         app,
         origins=allowed_origins,
-        supports_credentials=env_flag("CORS_SUPPORTS_CREDENTIALS", False),
-        allow_headers=["Content-Type", "Authorization", "X-Session-ID"],
+        supports_credentials=env_flag("CORS_SUPPORTS_CREDENTIALS", True),
+        allow_headers=["Content-Type", "Authorization", "X-Session-ID", "X-CSRF-TOKEN"],
         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     )
 

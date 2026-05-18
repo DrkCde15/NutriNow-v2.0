@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Activity, Ruler, Scale } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import bmiShape1 from "@/assets/bmi-shape-1.png";
@@ -68,9 +68,20 @@ const BMI_CATEGORIES: Array<{ min: number; max: number; config: BmiCategory }> =
 ];
 
 const BMI_SHAPES = [bmiShape1, bmiShape2, bmiShape3, bmiShape4, bmiShape5];
+const DEFAULT_WEIGHT = 68;
+const DEFAULT_HEIGHT = 1.72;
+const WEIGHT_MIN = 35;
+const WEIGHT_MAX = 180;
+const HEIGHT_MIN = 1.3;
+const HEIGHT_MAX = 2.1;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function normalizeInitialMeasurement(value: number, fallback: number, min: number, max: number) {
+  if (!Number.isFinite(value) || value <= 0) return fallback;
+  return clamp(value, min, max);
 }
 
 function getBmiCategory(bmi: number) {
@@ -90,9 +101,9 @@ function getBmiCategoryIndex(bmi: number) {
 }
 
 function BmiAvatar({ bmi, color }: { bmi: number; color: string }) {
-  const normalized = clamp((bmi - 15) / 25, 0, 1);
   const activeIndex = getBmiCategoryIndex(bmi);
   const resolvedIndex = activeIndex >= 0 ? activeIndex : 1;
+  const activeShape = BMI_SHAPES[resolvedIndex] ?? BMI_SHAPES[1];
 
   return (
     <div className="relative mx-auto flex h-[25rem] w-full max-w-[20rem] items-center justify-center">
@@ -112,30 +123,22 @@ function BmiAvatar({ bmi, color }: { bmi: number; color: string }) {
         aria-label="Silhueta corporal reagindo ao IMC"
       >
         <div className="relative flex h-full w-full items-center justify-center px-8 py-7">
-          {BMI_SHAPES.map((src, index) => {
-            const isActive = index === resolvedIndex;
-            const distance = Math.abs(index - resolvedIndex);
-
-            return (
-              <img
-                key={src}
-                src={src}
-                alt=""
-                aria-hidden
-                className="absolute h-[18.5rem] w-auto select-none object-contain mix-blend-multiply"
-                style={{
-                  opacity: isActive ? 1 : 0,
-                  transform: `translateY(${isActive ? "0px" : `${distance * 10}px`}) scale(${isActive ? 1.04 : 0.94})`,
-                  filter: isActive
-                    ? "brightness(1.01) contrast(1.02)"
-                    : "brightness(1) contrast(1)",
-                  backgroundColor: "#ffffff",
-                  transition:
-                    "opacity 360ms ease, transform 360ms ease, filter 360ms ease",
-                }}
-              />
-            );
-          })}
+          <img
+            key={activeShape}
+            src={activeShape}
+            alt=""
+            aria-hidden
+            loading="lazy"
+            decoding="async"
+            className="absolute h-[18.5rem] w-auto select-none object-contain mix-blend-multiply"
+            style={{
+              opacity: 1,
+              transform: "translateY(0px) scale(1.04)",
+              filter: "brightness(1.01) contrast(1.02)",
+              backgroundColor: "#ffffff",
+              transition: "opacity 360ms ease, transform 360ms ease, filter 360ms ease",
+            }}
+          />
         </div>
       </div>
     </div>
@@ -149,12 +152,22 @@ interface BmiAvatarCalculatorProps {
 }
 
 export function BmiAvatarCalculator({
-  initialWeight = 68,
-  initialHeight = 1.72,
+  initialWeight = DEFAULT_WEIGHT,
+  initialHeight = DEFAULT_HEIGHT,
   className,
 }: BmiAvatarCalculatorProps) {
-  const [weight, setWeight] = useState(initialWeight);
-  const [height, setHeight] = useState(initialHeight);
+  const resolvedInitialWeight = normalizeInitialMeasurement(initialWeight, DEFAULT_WEIGHT, WEIGHT_MIN, WEIGHT_MAX);
+  const resolvedInitialHeight = normalizeInitialMeasurement(initialHeight, DEFAULT_HEIGHT, HEIGHT_MIN, HEIGHT_MAX);
+  const [weight, setWeight] = useState(resolvedInitialWeight);
+  const [height, setHeight] = useState(resolvedInitialHeight);
+
+  useEffect(() => {
+    setWeight(resolvedInitialWeight);
+  }, [resolvedInitialWeight]);
+
+  useEffect(() => {
+    setHeight(resolvedInitialHeight);
+  }, [resolvedInitialHeight]);
 
   const bmi = useMemo(() => weight / (height * height), [weight, height]);
   const category = getBmiCategory(bmi);
@@ -187,8 +200,8 @@ export function BmiAvatarCalculator({
                 label="Peso"
                 value={weight}
                 displayValue={formatWeight(weight)}
-                min={35}
-                max={180}
+                min={WEIGHT_MIN}
+                max={WEIGHT_MAX}
                 step={1}
                 onValueChange={(next) => setWeight(next)}
               />
@@ -197,8 +210,8 @@ export function BmiAvatarCalculator({
                 label="Altura"
                 value={height}
                 displayValue={formatHeight(height)}
-                min={1.3}
-                max={2.1}
+                min={HEIGHT_MIN}
+                max={HEIGHT_MAX}
                 step={0.01}
                 onValueChange={(next) => setHeight(next)}
               />

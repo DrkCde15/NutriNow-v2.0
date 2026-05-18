@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Leaf,
@@ -11,8 +12,14 @@ import {
   HeartPulse,
 } from "lucide-react";
 import heroImg from "@/assets/hero-nutrition.jpg";
-import { BmiAvatarCalculator } from "@/components/bmi-avatar-calculator";
 import { SiteHeader } from "@/components/site-header";
+import { useAuth } from "@/lib/auth";
+
+const BmiAvatarCalculator = lazy(() =>
+  import("@/components/bmi-avatar-calculator").then((module) => ({
+    default: module.BmiAvatarCalculator,
+  })),
+);
 
 export const Route = createFileRoute("/")({
   component: Landing,
@@ -37,6 +44,17 @@ export const Route = createFileRoute("/")({
         href: "https://fonts.googleapis.com",
       },
       {
+        rel: "preconnect",
+        href: "https://fonts.gstatic.com",
+        crossOrigin: "anonymous",
+      },
+      {
+        rel: "preload",
+        as: "image",
+        href: heroImg,
+        fetchPriority: "high",
+      },
+      {
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap",
       },
@@ -45,12 +63,18 @@ export const Route = createFileRoute("/")({
 });
 
 function Landing() {
+  const { user } = useAuth();
+  const userHeight = typeof user?.altura === "number" && user.altura > 0 ? user.altura : undefined;
+  const userWeight = typeof user?.peso === "number" && user.peso > 0 ? user.peso : undefined;
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <SiteHeader />
       <main>
         <Hero />
-        <BmiAvatarCalculator />
+        <Suspense fallback={<div className="mx-auto max-w-6xl px-6 py-24" />}>
+          <BmiAvatarCalculator initialHeight={userHeight} initialWeight={userWeight} />
+        </Suspense>
         <Features />
         <HowItWorks />
         <CTA />
@@ -105,6 +129,9 @@ function Hero() {
               alt="Smoothie verde com frutas, abacate e halteres — nutrição e treino"
               width={1280}
               height={960}
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
               className="h-full w-full object-cover"
             />
           </div>

@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.database import get_db
+from app.services.account_cache import invalidate_cached_account
 
 logger = logging.getLogger(__name__)
 profile_bp = Blueprint("profile", __name__)
@@ -310,6 +311,7 @@ def update_perfil():
                     (user_id, meta, altura, peso, ja_treinou),
                 )
             conn.commit()
+            invalidate_cached_account(user_id)
             return jsonify({"success": True, "message": "Perfil atualizado com sucesso!"}), 200
     except Exception as e:
         logger.error(f"Erro ao atualizar perfil: {e}")
@@ -325,6 +327,7 @@ def delete_perfil():
             cursor.execute("DELETE FROM perfil WHERE usuario_id=%s", (user_id,))
             cursor.execute("DELETE FROM usuarios WHERE id=%s", (user_id,))
             conn.commit()
+            invalidate_cached_account(user_id)
             return jsonify({"success": True, "message": "Conta e perfil excluidos com sucesso!"}), 200
     except Exception as e:
         logger.error(f"Erro ao excluir perfil: {e}")

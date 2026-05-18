@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { lazy, Suspense, useMemo, useState, type ReactNode } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -9,21 +9,23 @@ import {
   Target,
   TrendingUp,
 } from "lucide-react";
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { BmiAvatarCalculator } from "@/components/bmi-avatar-calculator";
 import type {
   ConversationInsight,
   UserProfile,
   WeightHistoryPoint,
 } from "@/components/dashboard-models";
+
+const BmiAvatarCalculator = lazy(() =>
+  import("@/components/bmi-avatar-calculator").then((module) => ({
+    default: module.BmiAvatarCalculator,
+  })),
+);
+
+const WeightTrendChart = lazy(() =>
+  import("@/components/weight-trend-chart").then((module) => ({
+    default: module.WeightTrendChart,
+  })),
+);
 
 interface UserDashboardProps {
   initialProfile: UserProfile;
@@ -154,59 +156,15 @@ export default function UserDashboard({
 
               <div className="mt-6 h-80 w-full">
                 {hasChartData ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData}>
-                      <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="var(--color-muted-foreground)"
-                        tickLine={false}
-                        axisLine={false}
-                      />
-                      <YAxis
-                        yAxisId="left"
-                        stroke="var(--color-muted-foreground)"
-                        tickLine={false}
-                        axisLine={false}
-                        domain={["dataMin - 1", "dataMax + 1"]}
-                      />
-                      <YAxis
-                        yAxisId="right"
-                        orientation="right"
-                        stroke="var(--color-muted-foreground)"
-                        tickLine={false}
-                        axisLine={false}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          borderRadius: 18,
-                          border: "1px solid var(--color-border)",
-                          backgroundColor: "white",
-                          color: "var(--color-foreground)",
-                        }}
-                      />
-                      <Line
-                        yAxisId="left"
-                        type="monotone"
-                        dataKey="weight"
-                        name="Peso"
-                        stroke="var(--color-primary)"
-                        strokeWidth={3}
-                        dot={{ r: 4, fill: "var(--color-primary)" }}
-                        activeDot={{ r: 6 }}
-                        connectNulls={false}
-                      />
-                      <Line
-                        yAxisId="right"
-                        type="monotone"
-                        dataKey="activityLevel"
-                        name="Atividade"
-                        stroke="var(--color-accent-foreground)"
-                        strokeWidth={2}
-                        dot={{ r: 3, fill: "var(--color-accent-foreground)" }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <Suspense
+                    fallback={
+                      <div className="flex h-full items-center justify-center rounded-3xl bg-muted/20 text-sm text-muted-foreground">
+                        Carregando grafico...
+                      </div>
+                    }
+                  >
+                    <WeightTrendChart data={chartData} />
+                  </Suspense>
                 ) : (
                   <div className="flex h-full items-center justify-center rounded-3xl border border-dashed border-border bg-muted/20 px-6 text-center text-sm text-muted-foreground">
                     Ainda nao ha historico suficiente no banco para montar o grafico.
@@ -265,11 +223,13 @@ export default function UserDashboard({
           </aside>
         </div>
 
-        <BmiAvatarCalculator
-          initialWeight={profile.weight > 0 ? profile.weight : 68}
-          initialHeight={profile.height > 0 ? profile.height : 1.72}
-          className="mt-6"
-        />
+        <Suspense fallback={<div className="mt-6 min-h-[420px] rounded-[2rem] bg-muted/20" />}>
+          <BmiAvatarCalculator
+            initialWeight={profile.weight > 0 ? profile.weight : 68}
+            initialHeight={profile.height > 0 ? profile.height : 1.72}
+            className="mt-6"
+          />
+        </Suspense>
       </main>
     </section>
   );

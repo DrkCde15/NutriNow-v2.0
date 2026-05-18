@@ -12,7 +12,15 @@ from urllib.parse import urlencode
 
 import requests
 from flask import Blueprint, current_app, jsonify, redirect, request, url_for
-from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
+from flask_jwt_extended import (
+    create_access_token,
+    create_refresh_token,
+    get_jwt_identity,
+    jwt_required,
+    set_refresh_cookies,
+    unset_jwt_cookies,
+    verify_jwt_in_request,
+)
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from oauthlib.oauth2 import WebApplicationClient
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -28,6 +36,7 @@ from app.security import (
     validate_password,
 )
 from app.services.agent_service import clear_user_agents
+from app.services.account_cache import get_cached_account, set_cached_account
 from app.services.mail_service import envoyer_email
 
 logger = logging.getLogger(__name__)
@@ -156,6 +165,73 @@ def _hash_reset_token(token):
     return sha256(str(token or "").encode("utf-8")).hexdigest()
 
 
+def _optional_float(value):
+    if value is None:
+        return None
+    return float(value)
+
+
+def _account_payload(user):
+    return {
+        "id": user["id"],
+        "nome": user["nome"],
+        "email": user["email"],
+        "altura": _optional_float(user.get("altura")),
+        "peso": _optional_float(user.get("peso")),
+    }
+
+
+def _refresh_cookie_max_age():
+    return int(os.getenv("JWT_REFRESH_TOKEN_DAYS", "30")) * 24 * 60 * 60
+
+
+def _set_refresh_cookie(response, user_id):
+    refresh_token = create_refresh_token(identity=str(user_id))
+    set_refresh_cookies(response, refresh_token, max_age=_refresh_cookie_max_age())
+    return response
+
+
+def _account_by_id(user_id):
+    cached_user = get_cached_account(user_id)
+    if cached_user:
+        return cached_user
+
+    with get_db() as (cursor, conn):
+        cursor.execute(
+            """
+            SELECT u.id, u.nome, u.email, p.altura, p.peso
+            FROM usuarios u
+            LEFT JOIN perfil p ON u.id = p.usuario_id
+            WHERE u.id=%s
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        user = cursor.fetchone()
+
+    if not user:
+        return None
+
+    payload = _account_payload(user)
+    set_cached_account(user_id, payload)
+    return payload
+
+
+def _auth_response(user, message="Login realizado com sucesso!"):
+    account = _account_payload(user)
+    access_token = create_access_token(identity=str(account["id"]))
+    set_cached_account(account["id"], account)
+    response = jsonify(
+        {
+            "message": message,
+            "access_token": access_token,
+            "user": account,
+        }
+    )
+    _set_refresh_cookie(response, account["id"])
+    return response
+
+
 @auth_bp.route("/cadastro", methods=["POST", "OPTIONS"])
 def cadastro():
     if request.method == "OPTIONS":
@@ -232,19 +308,21 @@ def login():
 
     try:
         with get_db() as (cursor, conn):
-            cursor.execute("SELECT id, nome, email, senha FROM usuarios WHERE email=%s", (email,))
+            cursor.execute(
+                """
+                SELECT u.id, u.nome, u.email, u.senha, p.altura, p.peso
+                FROM usuarios u
+                LEFT JOIN perfil p ON u.id = p.usuario_id
+                WHERE u.email=%s
+                LIMIT 1
+                """,
+                (email,),
+            )
             user = cursor.fetchone()
             if not user or not check_password_hash(user["senha"], senha):
                 return jsonify({"error": "Email ou senha invalidos"}), 401
 
-            access_token = create_access_token(identity=str(user["id"]))
-            return jsonify(
-                {
-                    "message": "Login realizado com sucesso!",
-                    "access_token": access_token,
-                    "user": {"id": user["id"], "nome": user["nome"], "email": user["email"]},
-                }
-            ), 200
+            return _auth_response(user), 200
     except Exception as exc:
         logger.error(f"Erro no login: {exc}")
         return jsonify({"error": "Erro interno do servidor"}), 500
@@ -394,49 +472,78 @@ def exchange_google_auth_code():
 
     try:
         with get_db() as (cursor, conn):
-            cursor.execute("SELECT id, nome, email FROM usuarios WHERE id=%s", (user_id,))
+            cursor.execute(
+                """
+                SELECT u.id, u.nome, u.email, p.altura, p.peso
+                FROM usuarios u
+                LEFT JOIN perfil p ON u.id = p.usuario_id
+                WHERE u.id=%s
+                LIMIT 1
+                """,
+                (user_id,),
+            )
             user = cursor.fetchone()
 
         if not user:
             return jsonify({"error": "Usuario nao encontrado"}), 404
 
-        access_token = create_access_token(identity=str(user["id"]))
-        return jsonify(
-            {
-                "message": "Login realizado com sucesso!",
-                "access_token": access_token,
-                "user": {"id": user["id"], "nome": user["nome"], "email": user["email"]},
-            }
-        ), 200
+        return _auth_response(user), 200
     except Exception as exc:
         logger.error(f"Erro ao trocar codigo OAuth: {exc}")
         return jsonify({"error": "Erro interno do servidor"}), 500
 
 
 @auth_bp.route("/logout", methods=["POST"])
-@jwt_required()
 def logout():
+    try:
+        verify_jwt_in_request(optional=True, locations=["headers"])
+        user_id = get_jwt_identity()
+        if user_id:
+            clear_user_agents(user_id)
+    except Exception:
+        pass
+
+    response = jsonify({"message": "Logout realizado"})
+    unset_jwt_cookies(response)
+    return response, 200
+
+
+@auth_bp.route("/refresh", methods=["POST"])
+@jwt_required(refresh=True, locations=["cookies"])
+def refresh_session():
     user_id = get_jwt_identity()
-    clear_user_agents(user_id)
-    return jsonify({"message": "Logout realizado"}), 200
+
+    allowed, retry_after = check_rate_limit("refresh", 120, 300, user_id)
+    if not allowed:
+        return rate_limit_response(retry_after)
+
+    account = _account_by_id(user_id)
+    if not account:
+        response = jsonify({"error": "Usuario nao encontrado"})
+        unset_jwt_cookies(response)
+        return response, 404
+
+    access_token = create_access_token(identity=str(account["id"]))
+    response = jsonify(
+        {
+            "message": "Sessao renovada com sucesso!",
+            "access_token": access_token,
+            "user": account,
+        }
+    )
+    _set_refresh_cookie(response, account["id"])
+    return response, 200
 
 
 @auth_bp.route("/me", methods=["GET"])
 @jwt_required()
 def get_me():
     user_id = get_jwt_identity()
-    with get_db() as (cursor, conn):
-        cursor.execute("SELECT id, nome, email FROM usuarios WHERE id=%s", (user_id,))
-        user = cursor.fetchone()
-
-    if not user:
+    account = _account_by_id(user_id)
+    if not account:
         return jsonify({"error": "Usuario nao encontrado"}), 404
 
-    return jsonify({
-        "id": user["id"],
-        "nome": user["nome"],
-        "email": user["email"],
-    }), 200
+    return jsonify(account), 200
 
 
 @auth_bp.route("/esqueci-senha", methods=["POST"])

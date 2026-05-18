@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, Link, useNavigate, redirect } from "@tanstack/react-router";
 import { Mail, Lock, User, UserPlus, AlertCircle, Check } from "lucide-react";
 import { AuthShell, Field, inputClass, primaryButtonClass } from "@/components/auth-shell";
@@ -21,7 +21,7 @@ export const Route = createFileRoute("/cadastro")({
 });
 
 function CadastroPage() {
-  const { register } = useAuth();
+  const { register, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [nome, setNome] = useState("");
   const [sobrenome, setSobrenome] = useState("");
@@ -37,6 +37,12 @@ function CadastroPage() {
   const [loading, setLoading] = useState(false);
 
   const senhaForte = senha.length >= 10;
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      navigate({ to: "/" });
+    }
+  }, [authLoading, user, navigate]);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
