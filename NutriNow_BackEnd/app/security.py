@@ -67,26 +67,55 @@ def normalize_origin(value):
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
-def _configured_origins():
-    raw_values = [
-        os.getenv("FRONTEND_URL", ""),
-        os.getenv("CORS_ORIGIN", ""),
-        os.getenv("CORS_ORIGINS", ""),
-    ]
-    for raw in raw_values:
+def _active_origin_env_names():
+    env_names = (
+        ["FRONTEND_URL_DEV", "CORS_ORIGIN_DEV", "CORS_ORIGINS_DEV"]
+        if is_development()
+        else ["FRONTEND_URL_PROD", "CORS_ORIGIN_PROD", "CORS_ORIGINS_PROD"]
+    )
+
+    if any(os.getenv(name) for name in env_names):
+        return env_names
+
+    return ["FRONTEND_URL", "CORS_ORIGIN", "CORS_ORIGINS"]
+
+
+def _configured_origin_values():
+    for name in _active_origin_env_names():
+        raw = os.getenv(name, "")
         for item in raw.split(","):
-            origin = normalize_origin(item)
-            if origin:
-                yield origin
+            yield item.strip()
+
+
+def _configured_origins():
+    for item in _configured_origin_values():
+        origin = normalize_origin(item)
+        if origin:
+            yield origin
+
+
+def _configured_frontend_url():
+    env_names = (
+        ["FRONTEND_URL_DEV", "CORS_ORIGIN_DEV"]
+        if is_development()
+        else ["FRONTEND_URL_PROD", "CORS_ORIGIN_PROD"]
+    )
+
+    for name in [*env_names, "FRONTEND_URL", "CORS_ORIGIN"]:
+        item = os.getenv(name, "")
+        origin = normalize_origin(item)
+        if origin:
+            return origin
+
+    return LOCAL_FRONTEND_ORIGINS[0] if is_development() else DEPLOYED_FRONTEND_ORIGINS[0]
 
 
 def build_allowed_origins(include_local=None):
     if include_local is None:
         include_local = is_development()
 
-    configured_raw = f"{os.getenv('CORS_ORIGIN', '')},{os.getenv('CORS_ORIGINS', '')}"
-    if "*" in {item.strip() for item in configured_raw.split(",")}:
-        raise RuntimeError("CORS_ORIGIN/CORS_ORIGINS nao pode usar '*'")
+    if "*" in set(_configured_origin_values()):
+        raise RuntimeError("Variaveis de CORS nao podem usar '*'")
 
     origins = []
     for origin in DEPLOYED_FRONTEND_ORIGINS:
@@ -120,7 +149,7 @@ def select_frontend_origin(candidate=None, strict=False):
     if origin and origin in allowed_origins:
         return origin
 
-    fallback = normalize_origin(os.getenv("FRONTEND_URL")) or allowed_origins[0]
+    fallback = normalize_origin(_configured_frontend_url()) or allowed_origins[0]
     if strict and origin:
         raise ValueError("Origem de frontend nao permitida")
 

@@ -2,7 +2,7 @@ import logging
 import os
 import re
 from datetime import date, datetime, timedelta
-from urllib.parse import quote, urlencode, urlparse
+from urllib.parse import quote, urlencode
 
 import requests
 from flask import Blueprint, current_app, jsonify, redirect, request, url_for
@@ -11,6 +11,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from app.database import get_db
 from app.routes.auth import get_google_oauth_hosts
+from app.security import select_frontend_origin
 
 logger = logging.getLogger(__name__)
 google_calendar_bp = Blueprint("google_calendar", __name__)
@@ -86,14 +87,7 @@ def _get_state_serializer():
 
 
 def _normalize_frontend_origin(value=None):
-    fallback = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
-    candidate = (value or "").strip() or fallback
-    parsed = urlparse(candidate)
-
-    if parsed.scheme and parsed.netloc:
-        return f"{parsed.scheme}://{parsed.netloc}"
-
-    return candidate.rstrip("/") or fallback
+    return select_frontend_origin(value)
 
 
 def _get_frontend_origin():
@@ -660,7 +654,7 @@ def google_calendar_connect():
 
 @google_calendar_bp.route("/calendar/google/callback", methods=["GET"])
 def google_calendar_callback():
-    fallback_origin = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    fallback_origin = select_frontend_origin()
     state = request.args.get("state")
     target_origin = fallback_origin
 
