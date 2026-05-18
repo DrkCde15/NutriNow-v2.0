@@ -1,12 +1,17 @@
 function resolveApiBaseUrl() {
-  const configuredUrl = import.meta.env.VITE_API_URL;
+  const configuredUrl = import.meta.env.PROD
+    ? import.meta.env.VITE_API_URL_PROD
+    : import.meta.env.VITE_API_URL_DEV;
   if (configuredUrl) return configuredUrl;
 
-  if (typeof window !== "undefined") {
+  const legacyUrl = import.meta.env.VITE_API_URL;
+  if (legacyUrl) return legacyUrl;
+
+  if (!import.meta.env.PROD && typeof window !== "undefined") {
     return `${window.location.protocol}//${window.location.hostname}:8000`;
   }
 
-  return "http://127.0.0.1:8000";
+  return import.meta.env.PROD ? "https://nutrinow-9bt2.onrender.com" : "http://127.0.0.1:8000";
 }
 
 export const API_BASE_URL = resolveApiBaseUrl().replace(/\/+$/, "");
