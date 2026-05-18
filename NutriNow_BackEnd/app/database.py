@@ -11,13 +11,27 @@ _pool_lock = Lock()
 
 
 def _db_config():
-    return {
+    config = {
         "host": os.getenv("MYSQL_HOST"),
         "port": int(os.getenv("MYSQL_PORT", 3306)),
         "user": os.getenv("MYSQL_USER"),
         "password": os.getenv("MYSQL_PASSWORD"),
         "database": os.getenv("MYSQL_DATABASE"),
     }
+
+    ssl_mode = os.getenv("MYSQL_SSL_MODE", "").strip().lower()
+    if ssl_mode and ssl_mode != "disabled":
+        config["ssl_disabled"] = False
+
+        ssl_ca = os.getenv("MYSQL_SSL_CA")
+        if ssl_ca:
+            config["ssl_ca"] = ssl_ca
+            config["ssl_verify_cert"] = ssl_mode in {"verify_ca", "verify_identity"}
+            config["ssl_verify_identity"] = ssl_mode == "verify_identity"
+    elif ssl_mode == "disabled":
+        config["ssl_disabled"] = True
+
+    return config
 
 
 def _get_pool():
